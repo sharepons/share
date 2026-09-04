@@ -435,13 +435,20 @@ function SweepPanel({ view, onDone }: { view: TokenView; onDone: () => void }) {
       )}
       {error && <div className="note note--bad" style={{ marginTop: 12 }}>{error}</div>}
       {hash && (
+        /* ⛔⛔ "Done — the transaction." WAS NOT ENOUGH, AND THE COST WAS REAL. This step moves fees
+           INTO the vault; it does not pay anybody. Somebody who ran it and then watched their
+           balance stay at zero concluded the whole product was broken, when their money was sitting
+           credited and one click away on a DIFFERENT page. A success message that does not name the
+           next step is a dead end. ⚠ Say where the money is and link to it. */
         <div className="note note--good" style={{ marginTop: 12 }}>
-          Done —{' '}
-          <a className="link" href={txUrl(hash)} target="_blank" rel="noreferrer noopener">the transaction</a>.
+          <strong>Divided.</strong> The fees are credited to the recipients now —{' '}
+          <Link className="link" to={CLAIM}>claim what you are owed</Link>. This step only moved the
+          money into the vault; taking it out is a second transaction.{' '}
+          <a className="link" href={txUrl(hash)} target="_blank" rel="noreferrer noopener">The transaction</a>.
           {sweepNote && (
             <>
-              {' '}Fees already in the escrow have been divided and are claimable now. Anything still
-              in the pool stays there until Pons&rsquo;s own sweeper moves it — only it can.
+              {' '}⚠ Fees still sitting in the pool were not pulled in — only Pons&rsquo;s own sweeper
+              can move those, and it usually runs within the hour. Nothing is stuck.
             </>
           )}
         </div>
