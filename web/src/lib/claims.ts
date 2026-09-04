@@ -153,6 +153,15 @@ export async function createGraduatedPool(wallet: WalletClient, account: Address
  *
  * ⭐ Permissionless. Anybody can pay the gas, including the recipient.
  */
+/**
+ * What a sweep-and-harvest actually did.
+ *
+ * ⚠ `swept: 'skipped'` with a `hash` is a SUCCESS, not a partial failure — the harvest ran and paid
+ * out; only the attempt to pull in NEW fees could not. On a graduated launch that is the normal
+ * case, because only Pons's own sweeper may move a pool's fees.
+ */
+export type SweepAndHarvest = { hash: Hex; swept: 'done' | 'skipped' | 'nothing'; sweepError: string | null }
+
 export async function sweepAndHarvest(
   wallet: WalletClient,
   account: Address,
@@ -170,7 +179,7 @@ export async function sweepAndHarvest(
     hook: Address | null
     poolId: Hex | null
   },
-): Promise<Hex> {
+): Promise<SweepAndHarvest> {
   const { splitter, curve, pairToken, phase, hook, poolId } = opts
 
   if (phase === PHASE.swept) {
@@ -178,8 +187,76 @@ export async function sweepAndHarvest(
     throw new Error('this launch has graduated but its pool has not been created yet')
   }
 
+  /**
+   * ⛔⛔ THE SWEEP IS BEST-EFFORT AND MUST NEVER BLOCK THE HARVEST.
+   *
+   * These are two independent hops over two different piles of money. The sweep moves fees out of
+   * the curve or the pool into Pons's escrow; the harvest divides what is ALREADY in the escrow
+   * among the recipients. Money that arrived in an earlier sweep is sitting there waiting, and it
+   * has nothing to do with whether a new sweep can run today.
+   *
+   * 🔴🔴 RUNNING THEM AS ONE SEQUENCE STRANDED REAL MONEY. On a graduated launch `sweepPool`
+   * reverts for anyone but Pons's own operator (`0x31cdb504` — the hook's swap gate shuts on the
+   * fee recipient). The revert happened at the SIMULATION, so the function threw before it reached
+   * the harvest, and the button did nothing at all — on a launch with 0.93 ETH sitting in the
+   * escrow that a lone `harvest()` would have credited in 140k gas. The owner reported it as the
+   * button not working, and the money being missing. It was neither: it was reachable the whole
+   * time, behind a call that could never succeed.
+   *
+   * ➤ So a sweep that cannot run is recorded and stepped over, never thrown. The harvest is what
+   * this function is for.
+   */
+  let swept: 'done' | 'skipped' | 'nothing' = 'nothing'
+  let sweepError: string | null = null
+
   if (phase === PHASE.inPool) {
-    if (!hook || !poolId) throw new Error('this launch has graduated but its pool is not created yet')
+    if (!hook || !poolId) {
+      sweepError = 'the pool is not created yet'
+      swept = 'skipped'
+    } else {
+      try {
+        await sweepThePool(splitter, hook, poolId, account, wallet)
+        swept = 'done'
+      } catch (e) {
+        /* ⚠ Recorded, not thrown. @see the note above. */
+        sweepError = e instanceof Error ? (e as { shortMessage?: string }).shortMessage ?? e.message : String(e)
+        swept = 'skipped'
+      }
+    }
+  } else {
+    try {
+      await sweepTheCurve(splitter, curve, account, wallet)
+      swept = 'done'
+    } catch (e) {
+      sweepError = e instanceof Error ? (e as { shortMessage?: string }).shortMessage ?? e.message : String(e)
+      swept = 'skipped'
+    }
+  }
+
+  /* ⛔⛔ TWO ESCROW LEDGERS, AND A LAUNCH LANDS IN EXACTLY ONE. A launch paired against USDG credits
+     only the token side and its native balance reads a truthful, useless zero forever. Calling the
+     wrong one succeeds and moves nothing. */
+  const native = /^0x0+$/.test(pairToken)
+  const { request } = await publicClient.simulateContract({
+    address: splitter,
+    abi: SPLITTER_ABI,
+    functionName: native ? 'harvest' : 'harvestToken',
+    args: native ? [] : [pairToken],
+    account,
+  } as never)
+  const hash = await wallet.writeContract({ ...request, chain: rhc, account })
+  return { hash, swept, sweepError }
+}
+
+/** ⚠ Split out only so the caller above reads as the two independent hops it is. */
+async function sweepThePool(
+  splitter: Address,
+  hook: Address,
+  poolId: Hex,
+  account: Address,
+  wallet: WalletClient,
+): Promise<void> {
+  {
     const { request } = await publicClient.simulateContract({
       address: splitter,
       abi: SPLITTER_ABI,
@@ -198,29 +275,23 @@ export async function sweepAndHarvest(
       account,
     })
     await wallet.writeContract({ ...request, chain: rhc, account })
-  } else {
-    const { request } = await publicClient.simulateContract({
-      address: splitter,
-      abi: SPLITTER_ABI,
-      functionName: 'sweepCurve',
-      args: [curve, 0n],
-      account,
-    })
-    await wallet.writeContract({ ...request, chain: rhc, account })
   }
+}
 
-  /* ⛔⛔ TWO ESCROW LEDGERS, AND A LAUNCH LANDS IN EXACTLY ONE. A launch paired against USDG credits
-     only the token side and its native balance reads a truthful, useless zero forever. Calling the
-     wrong one succeeds and moves nothing. */
-  const native = /^0x0+$/.test(pairToken)
+async function sweepTheCurve(
+  splitter: Address,
+  curve: Address,
+  account: Address,
+  wallet: WalletClient,
+): Promise<void> {
   const { request } = await publicClient.simulateContract({
     address: splitter,
     abi: SPLITTER_ABI,
-    functionName: native ? 'harvest' : 'harvestToken',
-    args: native ? [] : [pairToken],
+    functionName: 'sweepCurve',
+    args: [curve, 0n],
     account,
-  } as never)
-  return wallet.writeContract({ ...request, chain: rhc, account })
+  })
+  await wallet.writeContract({ ...request, chain: rhc, account })
 }
 
 /** Whether the vault is accepting claims at all. ⚠ Funding is never paused; only claiming is. */

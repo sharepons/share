@@ -306,6 +306,8 @@ function SweepPanel({ view, onDone }: { view: TokenView; onDone: () => void }) {
   const { address, walletClient, onRightChain } = useWallet()
   const [busy, setBusy] = useState(false)
   const [hash, setHash] = useState<string | null>(null)
+  /** ⚠ Set when the harvest SUCCEEDED but a new sweep could not run. Not an error. */
+  const [sweepNote, setSweepNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const { unswept } = view
@@ -330,8 +332,12 @@ function SweepPanel({ view, onDone }: { view: TokenView; onDone: () => void }) {
         hook: unswept.pool?.hook ?? null,
         poolId: unswept.pool?.poolId ?? null,
       })
-      await publicClient.waitForTransactionReceipt({ hash: tx })
-      setHash(tx)
+      await publicClient.waitForTransactionReceipt({ hash: tx.hash })
+      setHash(tx.hash)
+      /* ⚠ A skipped sweep is NOT a failure — the harvest ran and paid out. On a graduated launch it
+         is the normal case, because only Pons's own sweeper may move a pool's fees. Saying so is
+         what stops the next person reading a successful payout as a half-broken one. */
+      setSweepNote(tx.swept === 'skipped' ? tx.sweepError : null)
       onDone()
     } catch (e) {
       const text = e instanceof Error ? e.message : String(e)
@@ -432,6 +438,12 @@ function SweepPanel({ view, onDone }: { view: TokenView; onDone: () => void }) {
         <div className="note note--good" style={{ marginTop: 12 }}>
           Done —{' '}
           <a className="link" href={txUrl(hash)} target="_blank" rel="noreferrer noopener">the transaction</a>.
+          {sweepNote && (
+            <>
+              {' '}Fees already in the escrow have been divided and are claimable now. Anything still
+              in the pool stays there until Pons&rsquo;s own sweeper moves it — only it can.
+            </>
+          )}
         </div>
       )}
 
