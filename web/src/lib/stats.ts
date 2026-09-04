@@ -25,13 +25,16 @@ export function siteStats(launches: Launch[]): SiteStats {
   let sharedUsd: bigint | null = null
   let unpriced = 0
 
+  /* ⛔ `earned`, not `shared` — see the note on Launch.earned. "Shared so far" read zero across a
+     site whose one launch was holding 0.93 ETH for its recipients, because the money had been
+     swept but not yet harvested. Both halves are theirs; only the division is pending. */
   for (const l of launches) {
-    if (l.shared === 0n) continue
-    if (l.sharedUsd === null) {
+    if (l.earned === 0n) continue
+    if (l.earnedUsd === null) {
       unpriced++
       continue
     }
-    sharedUsd = (sharedUsd ?? 0n) + l.sharedUsd
+    sharedUsd = (sharedUsd ?? 0n) + l.earnedUsd
   }
 
   const named = new Set<string>()
@@ -43,7 +46,7 @@ export function siteStats(launches: Launch[]): SiteStats {
       /* ⚠ Approximated at the LAUNCH level, because a per-recipient credit is a read per row and
          this figure is a headline, not a receipt. A launch that has shared anything has credited
          every one of its recipients, since the splitter divides in one call. */
-      if (l.shared > 0n) credited.add(r.identity)
+      if (l.earned > 0n) credited.add(r.identity)
     }
   }
 
@@ -91,11 +94,11 @@ export function people(launches: Launch[]): PersonRow[] {
          how somebody decides the row is not theirs. */
       row.handle = r.handle
 
-      if (l.shared > 0n) {
-        if (l.sharedUsd === null) row.unpriced++
+      if (l.earned > 0n) {
+        if (l.earnedUsd === null) row.unpriced++
         else {
-          /* ⚠ Their share of what the launch shared, not the whole of it. */
-          row.sharedUsd = (row.sharedUsd ?? 0n) + (l.sharedUsd * BigInt(r.bps)) / 10_000n
+          /* ⚠ Their share of what the launch earned, not the whole of it. */
+          row.sharedUsd = (row.sharedUsd ?? 0n) + (l.earnedUsd * BigInt(r.bps)) / 10_000n
         }
       }
       rows.set(r.identity, row)

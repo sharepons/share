@@ -74,8 +74,12 @@ export function previewLaunches(): Launch[] {
       shared: 2_140_000_000_000_000_000n,
       claimedOut: 900_000_000_000_000_000n,
       pending: 130_000_000_000_000_000n,
+      /* ⚠ shared + pending, kept consistent by hand because this is a fixture. Both halves are the
+         recipients' money; only the second hop has not run. @see launchpad.ts `earned`. */
+      earned: 2_270_000_000_000_000_000n,
       /** ⚠ USD figures are scaled by 1e6 throughout, not 1e18. */
       sharedUsd: 7_620_000_000n,
+      earnedUsd: 8_083_000_000n,
       phase: PHASE.onCurve,
       graduated: false,
       marketCapUsd: 148_400_000_000n,

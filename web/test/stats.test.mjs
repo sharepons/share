@@ -25,6 +25,16 @@ const launch = (over = {}) => ({
   graduated: false,
   marketCapUsd: null,
   ...over,
+  /* ⚠ AFTER the spread, and derived, so a test that sets only `shared` still describes a launch
+     with nothing pending — which is what those tests have always meant. A test that wants the
+     swept-but-unharvested case sets `pending` and gets it folded in here. @see Launch.earned. */
+  earned: (over.shared ?? 0n) + (over.pending ?? 0n),
+  earnedUsd:
+    over.earnedUsd !== undefined
+      ? over.earnedUsd
+      : over.sharedUsd === null || over.sharedUsd === undefined
+        ? (over.sharedUsd ?? null)
+        : over.sharedUsd,
 })
 
 /**
@@ -83,4 +93,35 @@ test('a persons credit is their share, not the launch total', () => {
   ])
   assert.equal(rows[0].sharedUsd, 7_000_000n)
   assert.equal(rows[1].sharedUsd, 3_000_000n)
+})
+
+
+/**
+ * ⛔⛔ THE BUG THIS PINS: "0 ETH shared" ON A TOKEN HOLDING 0.93 ETH FOR ITS RECIPIENTS.
+ *
+ * Fees reach people in two hops — a sweep puts them in Pons's escrow under the splitter's name, and
+ * `harvest()` divides them into the vault. The site counted only the second hop, so between the two
+ * a launch earning real money reported zero on its card and in the site total. Harvest is
+ * permissionless and nobody is obliged to run it, so that gap is not brief.
+ */
+test('⛔ fees that are SWEPT but not yet harvested still count as shared', () => {
+  const s = siteStats([
+    launch({ shared: 0n, pending: 930_000_000_000_000_000n, sharedUsd: 0n, earnedUsd: 3_300_000_000n }),
+  ])
+  assert.equal(s.sharedUsd, 3_300_000_000n, 'money in the escrow is the recipients money and must be counted')
+  assert.equal(s.unpriced, 0)
+})
+
+test('a launch with nothing anywhere still counts as nothing', () => {
+  const s = siteStats([launch({ shared: 0n, pending: 0n, sharedUsd: 0n, earnedUsd: 0n })])
+  assert.equal(s.sharedUsd, null, 'no money at all must not fabricate a zero-dollar total')
+  assert.equal(s.unpriced, 0)
+})
+
+test('⚠ a person is credited once their launch has earned, even before harvest', () => {
+  const rows = people([
+    launch({ shared: 0n, pending: 100n, sharedUsd: 0n, earnedUsd: 2_000_000n }),
+  ])
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].sharedUsd, 2_000_000n, 'the sole recipient holds 100% of what was earned')
 })

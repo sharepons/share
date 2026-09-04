@@ -20,6 +20,14 @@ import { SplitBar } from './SplitBar.tsx'
 export function TokenPage({ address }: { address: Address }) {
   const [view, setView] = useState<TokenView | null>(null)
   const [loading, setLoading] = useState(true)
+  /**
+   * ⛔⛔ "COULD NOT READ" IS NOT "DOES NOT EXIST", AND CONFLATING THEM SHIPPED.
+   * `readToken` returning null used to mean both, so a timeout or a rate limit rendered
+   * "This launchpad did not create that token" — a permanent verdict about somebody's token,
+   * produced by a network blip, on a page that had worked minutes earlier. Reported as the site
+   * being broken. This state exists so the two can never share a screen again.
+   */
+  const [unreachable, setUnreachable] = useState(false)
 
   const load = useCallback(() => {
     /* ⚠ Block-bodied. A concise-body effect hands React a promise as a cleanup function, and React
@@ -32,8 +40,14 @@ export function TokenPage({ address }: { address: Address }) {
     }
     void (async () => {
       setLoading(true)
+      setUnreachable(false)
       try {
         setView(await readToken(address))
+      } catch {
+        /* ⛔ `readToken` now RETHROWS anything that is not a contract revert. Reaching here means
+           the chain could not be read — never that the token is unknown. @see lib/token.ts. */
+        setView(null)
+        setUnreachable(true)
       } finally {
         setLoading(false)
       }
@@ -47,6 +61,26 @@ export function TokenPage({ address }: { address: Address }) {
       <section className="section">
         <div className="wrap">
           <div className="skeleton" style={{ height: 200, borderRadius: 16 }} />
+        </div>
+      </section>
+    )
+  }
+
+  /* ⛔⛔ CHECKED BEFORE THE "not a launch" SCREEN, because the difference matters more than the
+     layout does. This says nothing about the token — only that we could not ask. */
+  if (unreachable) {
+    return (
+      <section className="section">
+        <div className="wrap">
+          <div className="empty">
+            <h3>Could not reach the chain</h3>
+            <p className="mono small">{address}</p>
+            <p>
+              This says nothing about the token — the read failed before it could be answered. It is
+              usually a moment of network trouble.
+            </p>
+            <button type="button" className="btn" onClick={load}>Try again</button>
+          </div>
         </div>
       </section>
     )

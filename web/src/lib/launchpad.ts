@@ -170,6 +170,22 @@ export type Launch = Entry & {
   /** Swept into the escrow, or held by the splitter, and not yet credited. */
   pending: bigint
   /**
+   * ⭐⭐ WHAT THE LAUNCH HAS ACTUALLY EARNED FOR ITS RECIPIENTS — `shared + pending`.
+   *
+   * ⛔⛔ THIS EXISTS BECAUSE "0 ETH shared" WAS A LIE ON A TOKEN HOLDING 0.93 ETH. Fees reach
+   * recipients in TWO hops: a sweep moves them into Pons's escrow under the splitter's name, and
+   * `harvest()` then divides them into the vault. `shared` only counts the second hop, so between
+   * the two — which can be hours, because harvest is permissionless and nobody is obliged to run
+   * it — a launch earning real money reports zero, on its card and in the site total.
+   *
+   * ⚠ Both halves are already the recipients' money. The escrow balance is credited to the
+   * splitter, which has no owner and no way to send it anywhere else. The only difference is
+   * whether it has been divided yet.
+   * ⛔ It does NOT include fees still unswept on the curve or in the hook — that money is real but
+   * nobody has moved it, and the token page shows it separately as "Not swept yet".
+   */
+  earned: bigint
+  /**
    * `shared`, in USD, scaled by 1e6. ⛔ **Null when the asset cannot be priced**, never zero.
    *
    * ⚠⚠ THE ONLY FIGURE TWO LAUNCHES CAN BE COMPARED ON. Fees are denominated in whatever the launch
@@ -178,6 +194,8 @@ export type Launch = Entry & {
    * zero, with the count of what was left out shown beside the total.
    */
   sharedUsd: bigint | null
+  /** `earned` in USD, scaled by 1e6. ⛔ Null when the asset cannot be priced, never zero. */
+  earnedUsd: bigint | null
   /**
    * ⛔⛔ 0 on the curve · 1 swept but the pool is NOT seeded · 2 trading in the pool.
    *
@@ -405,9 +423,11 @@ async function hydrate(e: Entry, raw: readonly RawRecipient[], hook: Address | n
     pairSymbol: pair?.symbol ?? 'TOKEN',
     pairDecimals,
     shared: shared as bigint,
+    earned: (shared as bigint) + (pending as bigint),
     claimedOut: claimedOut as bigint,
     pending: pending as bigint,
     sharedUsd: capUsdScaled(shared as bigint, pairDecimals, usdPerUnit),
+    earnedUsd: capUsdScaled((shared as bigint) + (pending as bigint), pairDecimals, usdPerUnit),
     phase,
     graduated: phase >= PHASE.swept,
     marketCapUsd: capUsdScaled(capInPair, pairDecimals, usdPerUnit),

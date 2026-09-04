@@ -299,7 +299,8 @@ export function LaunchForm({ minSocialBps, onLaunched }: { minSocialBps: number;
       <section className="section">
         <div className="wrap" style={{ maxWidth: 720 }}>
           <p className="eyebrow">Launched</p>
-          <h2>{name} is live, and its split is written in.</h2>
+          {/* ⚠ The TICKER, not the name — it is what people will search and post. */}
+          <h2>{symbol} is live!</h2>
           <p className="lede">
             Nothing about who it pays can be changed now — not by you, not by this site, not by
             anybody holding any key.

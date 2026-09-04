@@ -1,4 +1,4 @@
-import { formatUnits, keccak256, parseAbi, toBytes, type Address } from 'viem'
+import { ContractFunctionZeroDataError, ContractFunctionRevertedError, BaseError, formatUnits, keccak256, parseAbi, toBytes, type Address } from 'viem'
 import { publicClient } from './chain.ts'
 import { capUsdScaled } from './marketCap.ts'
 import { pairBy } from './pairs.ts'
@@ -116,16 +116,59 @@ export type TokenView = {
   pending: bigint
 }
 
+/**
+ * Did the CONTRACT refuse, or could we not reach the chain?
+ *
+ * ⛔⛔ THIS DISTINCTION IS THE WHOLE POINT. A revert from `launchOf` is a fact — this launchpad did
+ * not create that token. Everything else is an absence of information, and the two must never
+ * render as the same screen. Treating a timeout as a verdict is how a working token page told its
+ * owner the token did not exist.
+ *
+ * ⚠ The structured check comes first; the message match is a fallback for nodes that return a bare
+ * "execution reverted" with no data. ⛔ A network error must never match either, so the fallback is
+ * deliberately narrow — it looks for the word the EVM uses, not for "failed" or "error".
+ */
+export function isContractRevert(e: unknown): boolean {
+  if (e instanceof BaseError) {
+    if (e.walk((err) => err instanceof ContractFunctionRevertedError)) return true
+    /* A call that returned no data at all — there is no contract there to answer. That is also a
+       fact about the address, not a transport problem. */
+    if (e.walk((err) => err instanceof ContractFunctionZeroDataError)) return true
+  }
+  const msg = e instanceof Error ? e.message : ''
+  return /execution reverted/i.test(msg)
+}
+
 export async function readToken(address: Address): Promise<TokenView | null> {
   if (!isLive()) return null
 
   /* ⛔ The register is the gate. A token this launchpad did not create has no split, and rendering it
      with zeroes would show a launch paying nobody as though that were a fact about it. `launchOf`
      REVERTS for an unknown token rather than answering with an empty struct, which is why this is a
-     catch and not a truthiness check. */
-  const found = await publicClient
-    .readContract({ address: LAUNCHPAD as Address, abi: LAUNCHPAD_ABI, functionName: 'launchOf', args: [address] })
-    .catch(() => null)
+     catch and not a truthiness check.
+
+     ⛔⛔ BUT A CATCH-ALL HERE IS A LIE, AND IT SHIPPED. This was `.catch(() => null)`, which caught
+     the intended revert AND every transport failure — a timeout, a rate limit, a Cloudflare
+     challenge, an RPC 5xx, a dropped connection. All of them became `null`, and `null` renders as
+     "Not a launch from here / This launchpad did not create that token": a confident, permanent
+     statement about somebody's token, produced by a network blip. It was reported as the site being
+     broken, on a token the register holds and the page had rendered correctly minutes earlier.
+
+     ➤ Only a REVERT means "not in the register". Anything else is "could not read", and the caller
+     must be able to tell the difference — so it is rethrown rather than flattened. @see
+     `readTokenOutcome` and TokenPage, which shows a retry instead of a verdict. */
+  let found: unknown
+  try {
+    found = await publicClient.readContract({
+      address: LAUNCHPAD as Address,
+      abi: LAUNCHPAD_ABI,
+      functionName: 'launchOf',
+      args: [address],
+    })
+  } catch (e) {
+    if (isContractRevert(e)) return null
+    throw e
+  }
   if (!found) return null
 
   const [entry, rawRecipients] = found as unknown as [Entry, readonly {

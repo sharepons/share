@@ -66,7 +66,10 @@ export function TokenCard({ launch }: { launch: Launch }) {
         </div>
 
         <div className="card__shared">
-          {amount(launch.shared, launch.pairDecimals)} {launch.pairSymbol} shared
+          {/* ⛔ `earned`, not `shared`. `shared` counts only what harvest has divided, so a token
+              holding 0.93 ETH of swept fees rendered "0 ETH shared" — read as the product not
+              working. @see lib/launchpad.ts. */}
+          {amount(launch.earned, launch.pairDecimals)} {launch.pairSymbol} shared
         </div>
 
         <div className="card__who">
