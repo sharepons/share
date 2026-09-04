@@ -54,6 +54,19 @@
 sharepons.family, www.sharepons.family {
 	encode zstd gzip
 
+	# ⛔⛔ www MUST REDIRECT TO THE APEX, AND IT IS THE GATE THAT MAKES IT LOAD-BEARING.
+	# The gate page sets `sharegate` with NO Domain attribute, so the cookie is HOST-ONLY: a cookie
+	# written on sharepons.family is never sent to www.sharepons.family. Both names resolve to this
+	# box and both were served by this same block, so anybody who reached the site via www was gated
+	# PERMANENTLY — the ?key= link would set a cookie on the apex and then hand them straight back to
+	# the gate on www, with no error and nothing in the page to explain it. Reported as "the preview
+	# link doesn't work", 5 Sep 2026.
+	# ⚠ Fix it HERE, not by adding `domain=.sharepons.family` to the cookie: widening a credential
+	# cookie to every subdomain is the wrong direction, and one canonical host is worth having anyway.
+	# ⭐ The redirect keeps {uri}, so the ?key= query survives it and the link works on either host.
+	@www host www.sharepons.family
+	redir @www https://sharepons.family{uri} permanent
+
 	# ══ THE GATE ═══════════════════════════════════════════════════════════════════════════════
 	# ⛔⛔ THIS IS THE GATE. The page at /root/share-gate is only its face — nothing in that HTML
 	# checks anything, and the access code is not in it. A visitor without the cookie gets the gate
@@ -72,12 +85,38 @@ sharepons.family, www.sharepons.family {
 	# ➤ TO CHANGE THE CODE: edit it in the regex below, `caddy validate`, `systemctl reload caddy`.
 	#   Everyone already inside is logged out, because their cookie stops matching.
 	# ➤ TO OPEN THE SITE TO THE PUBLIC: delete this matcher and its `handle` block. That is all.
+	# ══ ONE HOLE IN THE GATE, ON PURPOSE ═══════════════════════════════════════════════════════
+	# ⛔⛔ MUST STAY ABOVE @ungated. Caddy takes the first matching handle, so below it this never
+	# runs and Meta gets the gate.
+	#
+	# Instagram's deauthorize callback is a server-to-server POST from Meta's machines. Behind the
+	# gate it does not merely fail — `file_server` refuses POST, so Meta receives **405 Method Not
+	# Allowed**, which is not a "your app is private" answer, it is a broken endpoint. Verified by
+	# curl before this block existed.
+	#
+	# ⚠ WHY THIS IS NOT THE `/privacy` MISTAKE. Exempting a PAGE route opens the whole site, because
+	# the SPA fallback serves index.html and index.html pulls the entire application bundle — see
+	# the note in the @ungated handler. This path is not a page: it reverse-proxies to the API,
+	# answers only JSON, requires a valid HMAC signature over Meta's payload, and returns 400 to
+	# everything else. There is no bundle behind it and nothing to navigate to.
+	# @see server/src/index.ts and server/src/providers/metaSignedRequest.ts
+	handle /api/instagram/deauthorize {
+		reverse_proxy 127.0.0.1:5234
+	}
+
 	@ungated {
 		not header_regexp Cookie "(^|;[ ]*)sharegate=YOUR_ACCESS_CODE_HERE(;|$)"
 	}
 	handle @ungated {
 		root * /root/share-gate
-		try_files {path} /index.html
+		# ⭐⭐ {path}.html IS WHAT MAKES /privacy AND /terms READABLE WITHOUT THE CODE, and it is the
+		# whole reason they are prerendered to flat HTML instead of being exempted from the gate.
+		# ⛔⛔ EXEMPTING THE ROUTE INSTEAD WOULD OPEN THE WHOLE SITE: /privacy would serve the SPA's
+		# index.html, which pulls /assets/index-*.js — the entire application — and the app reads
+		# the chain straight from the browser, so only /api/* would still be shut. These two files
+		# carry no bundle and link nowhere but back to the gate.
+		# ⚠ Everything else still falls through to /index.html, which is the gate.
+		try_files {path} {path}.html /index.html
 		file_server
 	}
 
@@ -104,10 +143,34 @@ sharepons.family, www.sharepons.family {
 	}
 
 	header {
+		# ⚠ Live on the box and easy to lose on a resync: Caddy names itself in every response
+		# otherwise. Not a control, just one less free fact about what is running here.
+		-Server
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"
+	}
+
+	# ⛔⛔ THE GATE MAKES `/` TWO DIFFERENT DOCUMENTS AT ONE URL, AND A CACHE CANNOT SEE WHY.
+	# Same path, same method: without the cookie Caddy serves the 11KB gate page, with it the 3KB
+	# app shell. Nothing in the response said the body depends on a request header, so a browser
+	# that had already been to the gate cached THAT for `/` and re-served it from disk. The ?key=
+	# link then worked perfectly and looked completely broken: the cookie was written, and
+	# `location.replace('/')` was answered out of the local cache with the gate page again.
+	# Reported as "that preview link dont work", 5 Sep 2026.
+	#
+	# `Vary: Cookie` is the correct, minimal statement of the dependency. `no-store` on top of it is
+	# because these are two SECURITY-relevant documents at one address and neither is worth caching:
+	# the gate page is 11KB of static text and the app shell is a 3KB stub in front of hashed assets.
+	# ⛔ It must NOT cover /assets/* — those filenames carry a content hash, are immutable, and are
+	# the only thing on this site worth a long cache.
+	# ⚠ `+Vary` APPENDS. A bare `Vary` would replace the `Accept-Encoding` that `encode` sets, and
+	# the reward for that is a gzip body served to a client that asked for identity.
+	@cookie-dependent not path /assets/*
+	header @cookie-dependent {
+		+Vary Cookie
+		Cache-Control "no-store"
 	}
 
 	# ⚠ og.png must answer as an IMAGE. A missing one served by the SPA fallback answers 200

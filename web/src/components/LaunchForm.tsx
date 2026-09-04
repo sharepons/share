@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { isAddress, parseUnits, type Address, type Hex } from 'viem'
 import { publicClient, rhc, txUrl } from '../lib/chain.ts'
 import { checkLogo } from '../lib/logo.ts'
-import { LAUNCHPAD, LAUNCHPAD_ABI, LAUNCH_CONFIG_ID, isLive, previewEconomics, readFactoryState } from '../lib/launchpad.ts'
+import { LAUNCHPAD, LAUNCHPAD_ABI, LAUNCH_CONFIG_ID, isLive, previewEconomics, readFactoryState, readLaunchCount } from '../lib/launchpad.ts'
+import { isFirstLauncher, launchGate } from '../lib/launchGate.ts'
 import { NATIVE, PAIR_ASSETS } from '../lib/pairs.ts'
 import { PLATFORM_META, platformIndex } from '../lib/platforms.ts'
 import { pct } from '../lib/format.ts'
 import { tokenHref } from '../lib/router.ts'
 import { useSession } from '../lib/session.tsx'
 import { useWallet } from '../lib/wallet.tsx'
+import { LaunchGateModal } from './LaunchGateModal.tsx'
 import { LogoField } from './LogoField.tsx'
 import { RecipientRow, accountRefOf, handleOf, newRow, type Row } from './RecipientRows.tsx'
 import { SplitBar } from './SplitBar.tsx'
@@ -70,6 +72,9 @@ export function LaunchForm({ minSocialBps, onLaunched }: { minSocialBps: number;
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ token: Address; hash: Hex } | null>(null)
+  /* ⚠ The first-launch gate's dialog. @see lib/launchGate.ts — and note it has nothing to do with
+     the site's private-preview cookie gate, which is Caddy's and covers the whole domain. */
+  const [gateShown, setGateShown] = useState(false)
 
   useEffect(() => {
     /* ⚠ Block-bodied. A concise-body effect hands React the promise as a cleanup function and React
@@ -158,6 +163,26 @@ export function LaunchForm({ minSocialBps, onLaunched }: { minSocialBps: number;
     setBusy(true)
     setError(null)
     try {
+      /* ══ THE FIRST-LAUNCH GATE ══════════════════════════════════════════════════════════════
+         ⛔⛔ CHECKED HERE AND NOWHERE ELSE, ON PURPOSE. Putting it in the button's onClick would
+         leave `submit` itself reachable by any later caller — this is the one door, so the lock is
+         on it. It runs BEFORE the factory read and before the wallet is touched, so a blocked
+         visitor never sees a signature prompt and never spends a request.
+
+         ⚠ The count is fetched fresh rather than taken from the page's loaded list: the gate must
+         open the instant token #1 lands, for someone who had the form open the whole time.
+         ⭐ And it is not fetched at all for the first launcher — `launchGate(null, them)` is
+         `allowed`, so a slow or failing RPC can never strand the one wallet that must get through.
+
+         ⛔ This is an INTERFACE gate. `ShareLaunchpad` is deployed with no owner and no admin, so
+         it cannot be told to refuse anybody; calling the contract directly bypasses this entirely.
+         @see lib/launchGate.ts and docs/first-launch-gate.md. */
+      const gateCount = isFirstLauncher(address) ? null : await readLaunchCount()
+      if (launchGate(gateCount, address) === 'blocked') {
+        setGateShown(true)
+        return
+      }
+
       const state = await readFactoryState()
       if (!state.enabled) throw new Error('Pons has launches switched off right now.')
 
@@ -505,6 +530,12 @@ export function LaunchForm({ minSocialBps, onLaunched }: { minSocialBps: number;
             </button>
           )}
         </div>
+
+        {/* ⚠ Rendered from the main branch only, which is correct rather than a gap: the `done`
+            branch above is reached only AFTER a launch has succeeded, and a launch that succeeded
+            was not blocked. ⛔ The button is deliberately left ENABLED while the gate is up — the
+            press is what triggers this, and a dead button explains nothing. */}
+        {gateShown && <LaunchGateModal onClose={() => setGateShown(false)} />}
       </div>
     </section>
   )

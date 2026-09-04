@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { PRIVACY, TERMS } from '../lib/router.ts'
+import { DATA_DELETION, PRIVACY, TERMS } from '../lib/router.ts'
 import { Link } from './Link.tsx'
 
 /**
@@ -35,6 +35,10 @@ function Page({ title, children }: { title: string; children: ReactNode }) {
           <Link to={PRIVACY}>Privacy</Link>
           <span aria-hidden="true">·</span>
           <Link to={TERMS}>Terms</Link>
+          <span aria-hidden="true">·</span>
+          {/* ⚠ Reachable from both other pages on purpose: Meta's reviewer is given this URL
+              directly, but a person looking for it will look on the privacy policy. */}
+          <Link to={DATA_DELETION}>Deleting your data</Link>
         </nav>
       </div>
     </section>
@@ -130,7 +134,7 @@ export function PrivacyPage() {
         Sign out, and the session is deleted; leave it, and it expires in seven days. There is
         nothing else about you on our server unless you uploaded a logo or started a bio
         verification. Anything already written to the blockchain cannot be deleted by us or by
-        anybody else.
+        anybody else. <Link className="link" to={DATA_DELETION}>The full instructions are here.</Link>
       </p>
 
       <h3>Getting in touch</h3>
@@ -235,6 +239,106 @@ export function TermsPage() {
         The software is provided as is, without warranty of any kind, and is used at your own risk.
         It is open source under the MIT licence — you can read every line of it, and you are welcome
         to check these claims against the code before trusting either.
+      </p>
+    </Page>
+  )
+}
+
+/**
+ * How to delete your data — the URL given to Meta as the **Data deletion request URL**.
+ *
+ * ⛔⛔ INSTRUCTIONS, NOT A CALLBACK, AND THAT IS A DELIBERATE PRIVACY CHOICE. Meta accepts either.
+ * A callback receives an APP-SCOPED Instagram id, and `server/src/providers/instagram.ts` throws
+ * that id away on purpose — a session here is keyed by the lower-cased handle, because no third
+ * party can resolve an app-scoped id and so a share could never be *named* by one. To honour a
+ * callback we would have to start storing a second identifier for every Instagram user, forever,
+ * so that a seven-day cookie could be deleted a few days early. That is more data retained, not
+ * less. @see server/src/providers/metaSignedRequest.ts, which spells the same reasoning out.
+ *
+ * ⚠ EVERY WINDOW AND FIELD BELOW IS READ OUT OF `server/src/db.ts`. Change a TTL there and change
+ * it here in the same commit — @see the same rule at the top of this file.
+ */
+export function DataDeletionPage() {
+  return (
+    <Page title="Deleting your data">
+      <p className="legal__lede">
+        There is no account here to close. What this site keeps about you is a sign-in session and
+        nothing else, it deletes itself, and you can delete it yourself at any moment. This page says
+        exactly how, and is honest about the one thing nobody can delete.
+      </p>
+
+      <h3>Delete it yourself, right now</h3>
+
+      <ul>
+        <li>
+          <strong>Sign out.</strong> The session is deleted from our server on the spot — not marked,
+          not queued. That is the whole of it.
+        </li>
+        <li>
+          <strong>Or do nothing.</strong> A session expires seven days after it was created and is
+          swept, whether or not you ever come back.
+        </li>
+        <li>
+          <strong>Or revoke us at the platform.</strong> Removing SHARE from your Instagram, X,
+          GitHub or TikTok account settings stops any future sign-in. We hold no access token to
+          revoke — the one issued during sign-in is used once, to read your username, and thrown
+          away without ever being written to disk.
+        </li>
+      </ul>
+
+      <h3>What there is to delete</h3>
+
+      {/* ⚠ `server/src/db.ts` — the Session, Pending and BioClaim records, and nothing else. */}
+      <ul>
+        <li>
+          <strong>A sign-in session:</strong> the platform, your account id or handle, your display
+          name and avatar URL, and when it was created. Seven days.
+        </li>
+        <li>
+          <strong>A sign-in handshake in flight,</strong> if you closed the tab mid-way. Fifteen
+          minutes, then it is swept as abandoned.
+        </li>
+        <li>
+          <strong>A bio verification,</strong> if you started one — the handle, the one-time code and
+          the wallet it is bound to. Replaced by your next attempt, and it proves nothing once used.
+        </li>
+        <li>
+          <strong>A logo file,</strong> if you uploaded one while launching a token.{' '}
+          <strong>This one cannot be deleted</strong>, and it is not really yours: the URL is written
+          into the token's constructor on a chain that publishes no setter for it, so deleting the
+          file would break that token's image for everybody, permanently.
+        </li>
+      </ul>
+
+      <h3>What cannot be deleted, by us or by anybody</h3>
+
+      <p>
+        A launch writes its split to a public blockchain. If an account of yours was named as a
+        recipient — with or without your involvement — that name and that percentage are public,
+        permanently, and no request to us can remove them. There is no delete function in the
+        contracts and no owner who could call one. That is the same property that makes a share
+        genuinely yours rather than a promise from us, and it cuts both ways.
+      </p>
+
+      <p>
+        A share you never claim simply waits. There is no expiry and nothing accrues to us if you
+        walk away.
+      </p>
+
+      <h3>Asking us</h3>
+
+      <p>
+        You should not have to, and there is unlikely to be anything left by the time we read it.
+        But if you want a deletion confirmed, open an issue on the{' '}
+        <a className="link" href="https://github.com/sharepons/share" target="_blank" rel="noreferrer noopener">
+          public repository
+        </a>{' '}
+        or message us on{' '}
+        <a className="link" href="https://x.com/sharepons" target="_blank" rel="noreferrer noopener">
+          X
+        </a>
+        , and say which account. ⚠ Do not send a private key, a seed phrase or a password — nobody
+        here will ever ask for one, and we cannot use one.
       </p>
     </Page>
   )

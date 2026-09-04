@@ -36,6 +36,7 @@ import {
 import { LOGO_NAME, LOGO_TYPES, MAX_BYTES, rateLimited, storeLogo } from './logos.ts'
 import { githubProvider } from './providers/github.ts'
 import { instagramProvider } from './providers/instagram.ts'
+import { verifySignedRequest } from './providers/metaSignedRequest.ts'
 import { tiktokProvider } from './providers/tiktok.ts'
 import { xProvider } from './providers/x.ts'
 
@@ -280,6 +281,34 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   if (path === '/api/auth/signout' && req.method === 'POST') {
     store.dropSession(jar[SESSION_COOKIE])
     clearCookie(res, SESSION_COOKIE)
+    return json(res, 200, { ok: true })
+  }
+
+  /**
+   * Instagram's deauthorize callback. Meta POSTs here when somebody removes this app from their
+   * Instagram account, and the URL is a required field in Business login settings.
+   *
+   * ⛔⛔ THIS IS A SERVER-TO-SERVER POST WITH NO COOKIE AND NO ORIGIN HEADER. It survives the CSRF
+   * guard above only because `sameOrigin` treats a missing `Origin` as same-origin — a browser
+   * cannot omit it on a cross-site POST, a datacentre can. The signature is the real check.
+   *
+   * ⚠⚠ AND IT IS BEHIND THE GATE. While the site is in private preview Caddy answers every path
+   * with the gate page, and `file_server` refuses POST — so an unexempted callback answers Meta
+   * **405** rather than anything it can act on. @see Caddyfile.share, which exempts this one path.
+   *
+   * ⭐ 200 EVEN WHEN THERE IS NOTHING TO DO, and that is honest, not a stub — see
+   * `providers/metaSignedRequest.ts` for why the app-scoped `user_id` names nobody we hold.
+   */
+  if (path === '/api/instagram/deauthorize' && req.method === 'POST') {
+    if (!config.instagram) return json(res, 503, { error: 'instagram is not set up here' })
+    const form = new URLSearchParams((await readBody(req)).toString('utf8'))
+    const signed = verifySignedRequest(form.get('signed_request') ?? '', config.instagram.secret)
+    /* ⛔ 400, not 200. An unsigned POST to this path is not Meta, and answering it OK would make
+       the endpoint indistinguishable from one that never checked. */
+    if (!signed) return json(res, 400, { error: 'bad signed_request' })
+    /* ⚠ Logged without the id. Knowing a revocation arrived is operationally useful; recording an
+       app-scoped identifier we deliberately do not store is not. */
+    console.log('[share] instagram deauthorize received and verified')
     return json(res, 200, { ok: true })
   }
 

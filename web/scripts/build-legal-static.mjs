@@ -133,9 +133,16 @@ async function main() {
   const mod = await import(`file://${out}?t=${Date.now()}`)
   const css = builtCss()
 
+  /* ⛔⛔ EVERY PUBLIC LEGAL ROUTE MUST BE IN THIS LIST. A route that exists in the app but not here
+     is served the GATE page with a 200 while the site is in private preview — the exact failure
+     these files exist to prevent, and it looks like a working page to anything that only checks a
+     status code. @see web/src/lib/router.ts, where the three are declared together. */
   const pages = [
     { file: 'privacy.html', title: 'Privacy', Component: mod.PrivacyPage },
     { file: 'terms.html', title: 'Terms', Component: mod.TermsPage },
+    /* ⚠ Meta's "Data deletion request URL" points at this exact path. Renaming the file renames
+       a URL that is registered in somebody else's dashboard. */
+    { file: 'data-deletion.html', title: 'Deleting your data', Component: mod.DataDeletionPage },
   ]
 
   for (const { file, title, Component } of pages) {

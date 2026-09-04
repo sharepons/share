@@ -217,8 +217,34 @@ h1 {
     '; path=/; max-age=2592000; samesite=lax' +
     (location.protocol === 'https:' ? '; secure' : '')
 
-  /* ⚠ replace(), not assign() — the URL carrying the code must not become a history entry. */
-  location.replace(location.pathname)
+  /* ⛔⛔ THE COOKIE IS NOT ENOUGH ON ITS OWN — THE BROWSER MAY ANSWER THE NEXT HOP ITSELF.
+     `/` is TWO different documents depending on this cookie, and a browser that had already seen
+     the gate cached that HTML for `/`. Setting the cookie and calling replace('/') then landed
+     back on the gate, served from local disk, having never asked the server. The key link looked
+     dead while working perfectly. Reported 5 Sep 2026.
+
+     The server side is the real fix (`Vary: Cookie` + `Cache-Control: no-store` in the vhost, so
+     no NEW cache entry is ever made) but it cannot reach into a cache that was poisoned before it
+     shipped. This forces one network fetch with `cache: 'reload'`, which both bypasses the cached
+     entry AND overwrites it with the app shell, so the replace() below reads the right thing.
+
+     ⚠ Fire-and-forget by design: the fetch is an optimisation, never a gate. If it is unsupported,
+     blocked, or fails, we still replace() — the cookie is set either way and the worst case is the
+     old behaviour, not a locked door. */
+  function go() {
+    /* ⚠ replace(), not assign() — the URL carrying the code must not become a history entry. */
+    location.replace(location.pathname)
+  }
+
+  try {
+    if (typeof fetch === 'function') {
+      fetch(location.pathname, { cache: 'reload', credentials: 'same-origin' }).then(go, go)
+    } else {
+      go()
+    }
+  } catch (e) {
+    go()
+  }
 })()
 </script>
 </body>

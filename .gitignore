@@ -7,7 +7,14 @@ cache/
 .env.production
 *.tsbuildinfo
 data/
-lib/
+# ⛔⛔ ANCHORED TO contracts/, AND THAT IS NOT TIDINESS. Written bare as `lib/` this rule matched
+# EVERY directory named lib at any depth — including `web/src/lib/`, which is 23 files: every chain
+# read, the router, the wallet, the claims logic and the launch gate. The public repo shipped
+# `App.tsx` importing `./lib/router.ts` with no lib directory beside it, so github.com/sharepons/share
+# could not build. Found 4 Sep 2026 by fetching the paths from GitHub, not by reading this file.
+# ⚠ The publish audit looked for secrets LEAKING OUT and could not see code FAILING to go out.
+# What it is actually for: Foundry's dependency checkout, which is a submodule tree.
+contracts/lib/
 
 # Secrets that are templates today and live keys later. ⛔ None of these match the `.env` rule
 # above: `.env` matches only a file named exactly that, so `oauth.env` and the pre-deploy backups

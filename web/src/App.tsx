@@ -13,7 +13,7 @@ import { Hero } from './components/Hero.tsx'
 import { HowItWorks } from './components/HowItWorks.tsx'
 import { HowItWorksPage } from './components/HowItWorksPage.tsx'
 import { LaunchForm } from './components/LaunchForm.tsx'
-import { PrivacyPage, TermsPage } from './components/Legal.tsx'
+import { DataDeletionPage, PrivacyPage, TermsPage } from './components/Legal.tsx'
 import { MyTokens } from './components/MyTokens.tsx'
 import { Launches } from './components/Launches.tsx'
 import { TokenPage } from './components/TokenPage.tsx'
@@ -78,6 +78,8 @@ function Site() {
           <PrivacyPage />
         ) : route.name === 'terms' ? (
           <TermsPage />
+        ) : route.name === 'data-deletion' ? (
+          <DataDeletionPage />
         ) : (
           <>
             <Hero launches={launches} loading={loading} />
