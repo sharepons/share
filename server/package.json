@@ -1,0 +1,20 @@
+{
+  "name": "share-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types --watch src/index.ts",
+    "start": "node --experimental-strip-types src/index.ts",
+    "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "signer:address": "node --experimental-strip-types scripts/signer-address.ts",
+    "preflight": "node --experimental-strip-types scripts/preflight.ts"
+  },
+  "dependencies": {
+    "viem": "^2.55.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  }
+}

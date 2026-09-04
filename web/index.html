@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- ⚠ The browser-tab text, and deliberately just the name. Nothing sets `document.title` per
+         route, so this is what every page shows — keep it that way if a router ever gains titles. -->
+    <title>Share Pons</title>
+    <meta name="description" content="A launchpad on Robinhood Chain where a token's trading fees are split with named X, GitHub, Instagram and TikTok accounts, written in at the moment it is created." />
+
+    <!--
+      ⚠⚠ `twitter:card` HAS NO og EQUIVALENT. Without it X crops this 1200x630 image to a square,
+      and every og validator stays green while it happens. It is not redundant with og:image.
+      ⛔ No `twitter:site` until @… is registered — it renders as a link to nothing.
+      ⚠ og:image is ABSOLUTE. A relative one is a blank card that every validator passes, because
+      they check the tag exists rather than that it resolves. That has shipped on this stack before.
+      ⚠ Assert it answers with an IMAGE content-type after every deploy — a missing og.png served by
+      the SPA fallback answers 200 text/html, which is a blank card no check catches:
+          curl -sI https://sharepons.family/og.png | grep -i content-type
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SHARE" />
+    <meta property="og:title" content="SHARE — share the fees" />
+    <meta property="og:description" content="Name the accounts a token earns for. The split is written into the chain in the same transaction that creates the token, and nobody can change it afterwards." />
+    <meta property="og:url" content="https://sharepons.family/" />
+    <meta property="og:image" content="https://sharepons.family/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- ⭐ Registered 4 Sep 2026, so this is now a link to something real. ⛔ It attributes the card
+         to the account: a handle that does not exist renders as a broken byline on every share. -->
+    <meta name="twitter:site" content="@sharepons" />
+
+    <!-- ⚠ Matches --void in styles.css. A stale one here paints a dark bar above a light page. -->
+    <meta name="theme-color" content="#f4f7f0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- ⛔ The favicon is the mark on a DEEP SAGE TILE, not the bare logo. The mark is pale glass —
+         on the light tab strip of a browser the bare file is an invisible smudge. Same reason the
+         header tile has a ground; see components/Mark.tsx. -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

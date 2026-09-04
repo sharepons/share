@@ -1,0 +1,33 @@
+node_modules/
+dist/
+out/
+cache/
+.env
+.env.local
+.env.production
+*.tsbuildinfo
+data/
+lib/
+
+# Secrets that are templates today and live keys later. ⛔ None of these match the `.env` rule
+# above: `.env` matches only a file named exactly that, so `oauth.env` and the pre-deploy backups
+# were tracked. They are empty right now, which is exactly why this is cheap to fix.
+oauth.env
+*.bak-predeploy
+.signer.key
+
+# ── ⛔⛔ NEVER PUBLIC ──────────────────────────────────────────────────────────────────────────────
+# This repo is PUBLIC. These three are internal and each was verified to contain something that
+# must not leave the box — see the audit in HANDOFF.md.
+#
+#   HANDOFF.md            the gate access code, the server IP, and an operational runbook that
+#                         catalogues what is weak and where. Useful to us, a map to anyone else.
+#   Caddyfile.share       the live gate access code, in the cookie regex. Publishing it opens the
+#                         site. ⭐ A redacted copy IS public at deploy/Caddyfile.example.
+#   docs/oauth-setup.md   notes a credential exposure affecting SIBLING projects by name.
+#
+# ⚠ Adding a file here does NOT remove it from history if it was ever committed. Check with
+#   `git log --all --oneline -- <path>` before assuming a leak was never published.
+HANDOFF.md
+Caddyfile.share
+docs/oauth-setup.md

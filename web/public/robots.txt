@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+# ⚠ No Sitemap line until there is a domain to put in it.

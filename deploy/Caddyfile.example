@@ -1,0 +1,116 @@
+# ⚠⚠ REDACTED COPY — this is the file that is PUBLIC.
+#
+# Two values are placeholders and must be filled in for a real deployment:
+#   sharegate=YOUR_ACCESS_CODE_HERE   the gate code, compared against the visitor's cookie
+#   YOUR.SERVER.IP                    the host
+#
+# ⛔ The working copy with the real values lives beside it as `Caddyfile.share`, which is
+# gitignored. Do not "sync" this file back over that one, and never paste a real code in here.
+#
+# SHARE — the vhost for sharepons.family
+#
+# ⛔⛔⛔ THIS BOX SERVES ~31 OTHER SITES. THIS FILE IS ADDITIVE AND NOTHING ELSE.
+#
+# Append this block to the server's Caddyfile. Do not reformat, reorder, or "tidy" the rest of that
+# file while you are in there: a diff that touches another project's vhost is a diff that can take
+# that project down, and every site on this box shares one Caddy process.
+#
+# ⛔⛔ NEVER RUN `caddy stop`. It ignores `--config`, talks to the admin API on :2019, and stops the
+# SYSTEMD instance — which is every vhost on the box. It exits 0 and looks deliberate. It has taken
+# all 31 sites down on this stack once already. To apply this:
+#
+#     # 1. back the live config up FIRST, so a bad edit is one command from undone
+#     ssh $HOST 'cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak-$(date +%Y%m%d-%H%M%S)'
+#     # 2. append this block
+#     # 3. check it PARSES before asking Caddy to load it
+#     ssh $HOST 'caddy validate --config /etc/caddy/Caddyfile'
+#     # 4. reload — never stop/start
+#     ssh $HOST 'systemctl reload caddy'
+#     # 5. prove the OTHER sites still answer, not just this one
+#     for d in pump.family rhcompany.xyz tagonpons.xyz stakepons.xyz; do
+#       printf '%-20s ' "$d"; curl -sI -o /dev/null -w '%{http_code}\n' "https://$d/"
+#     done
+#
+# ## ⚠ Certificates
+#
+# DNS was set 4 Sep 2026: apex and www → YOUR.SERVER.IP, and **no AAAA records**, which is what makes
+# this straightforward. A parking-page import brings AAAA records along, Let's Encrypt prefers IPv6,
+# and issuance then fails against a host that is not listening there — silently, while every A
+# record looks perfect. Re-check with `dig +short @dns1.registrar-servers.com sharepons.family AAAA`
+# before blaming Caddy. A record that is PROXIED can never get a cert either; the tell is HTTP 525.
+
+# ## ⭐ THE GATE — replaced HTTP basic auth, 4 Sep 2026
+#
+# The browser's basic-auth dialog is not something you can put a logo on, so the gate is now a real
+# page: /root/share-gate/{index.html,logo.png,favicon.png}, served by Caddy to anybody whose request
+# does not carry the right cookie. ⛔ The check lives in THIS FILE, not in that page — see the
+# block below. Deploy the page with:
+#
+#     rsync -az --delete gate/ root@YOUR.SERVER.IP:/root/share-gate/
+#
+# ⛔ `--delete` here is safe ONLY because /root/share-gate holds nothing but the gate. Never point
+# it at a parent, and never at /root/share-web (its parent is not the site root — dist is).
+
+sharepons.family, www.sharepons.family {
+	encode zstd gzip
+
+	# ══ THE GATE ═══════════════════════════════════════════════════════════════════════════════
+	# ⛔⛔ THIS IS THE GATE. The page at /root/share-gate is only its face — nothing in that HTML
+	# checks anything, and the access code is not in it. A visitor without the cookie gets the gate
+	# page for EVERY path, including /api and /logos; a visitor with it gets the site. The code is
+	# typed on the gate page, stored as the cookie value, and compared HERE on the next request.
+	#
+	# ⚠ SAME SECURITY MODEL AS THE basic_auth IT REPLACED — one shared credential the browser
+	# resends. It keeps the public out; it is not an authorisation system, and it never was.
+	#
+	# ⚠ THE MATCHER MUST COME BEFORE EVERY OTHER `handle`. Caddy takes the first matching handle in
+	# a mutually-exclusive group, so placed after them the gate never runs and the site is public.
+	#
+	# ⚠ No `\s` in the regex ON PURPOSE — the Caddyfile does its own unescaping pass before the
+	# regexp engine sees the string, so a class written `[ ]` cannot be mangled by it.
+	#
+	# ➤ TO CHANGE THE CODE: edit it in the regex below, `caddy validate`, `systemctl reload caddy`.
+	#   Everyone already inside is logged out, because their cookie stops matching.
+	# ➤ TO OPEN THE SITE TO THE PUBLIC: delete this matcher and its `handle` block. That is all.
+	@ungated {
+		not header_regexp Cookie "(^|;[ ]*)sharegate=YOUR_ACCESS_CODE_HERE(;|$)"
+	}
+	handle @ungated {
+		root * /root/share-gate
+		try_files {path} /index.html
+		file_server
+	}
+
+	# ⛔⛔ THE API MUST BE MATCHED BEFORE THE SPA FALLBACK. Ordering is the whole thing: reversed,
+	# `try_files` answers /api/* with index.html, `/api/providers` parses as nothing, and the claim
+	# page renders "no platform is wired up" on a deployment where every platform is.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:5234
+	}
+
+	# ⛔⛔ TOKEN LOGOS ARE SERVED FROM OUTSIDE THE SITE ROOT, ON PURPOSE. A token's `logo` is written
+	# into its constructor with NO SETTER on Pons V2, so the URL is permanent. Inside the deploy root
+	# the web deploy's `rsync --delete` would erase every launched token's logo, forever.
+	handle /logos/* {
+		reverse_proxy 127.0.0.1:5234
+	}
+
+	handle {
+		root * /root/share-web/dist
+		# ⛔⛔ NOT OPTIONAL. Without the fallback every link works inside the app while every REFRESH
+		# and every shared link 404s — the failure nobody sees while clicking around.
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+	}
+
+	# ⚠ og.png must answer as an IMAGE. A missing one served by the SPA fallback answers 200
+	# text/html — a blank X card that every og validator passes:
+	#     curl -sI https://sharepons.family/og.png | grep -i content-type
+}

@@ -1,0 +1,25 @@
+[Unit]
+Description=SHARE — identity attestations and logo hosting
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/share-server
+EnvironmentFile=/root/share-server/.env
+ExecStart=/usr/bin/node --experimental-strip-types src/index.ts
+Restart=always
+RestartSec=3
+# ⚠ A long-running process holding OAuth state in memory would lose sign-ins on every restart; the
+# store is on disk for exactly that reason, so restarting is cheap.
+StandardOutput=journal
+StandardError=journal
+
+# ⛔ The attestation key is in the environment file. Nothing else on the box needs to read it.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
