@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { isAddress, parseUnits, type Address, type Hex } from 'viem'
 import { publicClient, rhc, txUrl } from '../lib/chain.ts'
-import { checkLogo } from '../lib/logo.ts'
+import { tokenImageProblem } from '../lib/logo.ts'
 import { LAUNCHPAD, LAUNCHPAD_ABI, LAUNCH_CONFIG_ID, isLive, previewEconomics, readFactoryState, readLaunchCount } from '../lib/launchpad.ts'
 import { isFirstLauncher, launchGate } from '../lib/launchGate.ts'
 import { NATIVE, PAIR_ASSETS } from '../lib/pairs.ts'
@@ -39,6 +39,9 @@ export function LaunchForm({ minSocialBps, onLaunched }: { minSocialBps: number;
   const [symbol, setSymbol] = useState('')
   const [description, setDescription] = useState('')
   const [logo, setLogo] = useState('')
+  /* ⛔⛔ Whether the image URL actually LOADS — not whether it is shaped like a URL. `null` means
+     the browser has not finished trying. @see LogoField's `onReachable`. */
+  const [logoReachable, setLogoReachable] = useState<boolean | null>(null)
   const [website, setWebsite] = useState('')
   const [twitter, setTwitter] = useState('')
   /* ⚠ Still sent in the launch params, as an empty string. Pons's `Socials` struct has a telegram
@@ -106,7 +109,16 @@ export function LaunchForm({ minSocialBps, onLaunched }: { minSocialBps: number;
     const out: string[] = []
     if (!name.trim()) out.push('The token needs a name.')
     if (!/^[A-Za-z0-9]{2,11}$/.test(symbol.trim())) out.push('A symbol is 2–11 letters or digits.')
-    if (!checkLogo(logo).ok) out.push('The token image is not usable.')
+    /* ⛔⛔ THE IMAGE IS REQUIRED, LIKE THE NAME AND THE SYMBOL, AND FOR THE SAME REASON.
+       All three are written into the token's constructor and Pons V2 ships no setter for any of
+       them. Until 5 Sep 2026 two of the three were required and this one was not, so the only
+       permanent field nobody can SEE was wrong was also the only one you could leave blank. Pons
+       accepts an empty logo silently — proven on a fork against the live launchpad in
+       `test_anEmptyLogoIsAcceptedByPons_whichIsWhyTheInterfaceMustNotAllowIt` — so nothing below
+       this line will stop it. `$GRAILS` on a sibling project launched with no image and has none
+       forever. */
+    const imageProblem = tokenImageProblem(logo, logoReachable)
+    if (imageProblem) out.push(imageProblem)
     /* ⚠ Every exemption must be an address. A typo here is not caught on chain — Pons accepts any
        address, so a mistyped one silently exempts nobody and the intended wallet still pays 99%. */
     exempts.forEach((a, i) => {
@@ -145,7 +157,7 @@ export function LaunchForm({ minSocialBps, onLaunched }: { minSocialBps: number;
     }
     if (creatorTaxBps > (factory?.maxTax ?? 500)) out.push('That creator tax is above what Pons allows.')
     return out
-  }, [name, symbol, logo, rows, totalBps, socialBps, minSocialBps, creatorTaxBps, factory, exempts])
+  }, [name, symbol, logo, logoReachable, rows, totalBps, socialBps, minSocialBps, creatorTaxBps, factory, exempts])
 
   const ready = problems.length === 0 && isLive() && Boolean(factory?.enabled) && Boolean(address) && onRightChain
 
@@ -349,7 +361,7 @@ export function LaunchForm({ minSocialBps, onLaunched }: { minSocialBps: number;
           </div>
 
           <div style={{ marginTop: 18 }}>
-            <LogoField value={logo} onChange={setLogo} />
+            <LogoField value={logo} onChange={setLogo} onReachable={setLogoReachable} />
           </div>
 
           <div className="formgrid" style={{ marginTop: 18 }}>

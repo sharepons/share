@@ -64,3 +64,36 @@ export function checkLogo(value: string): LogoCheck {
   }
   return { ok: true, bytes, preview, error: null }
 }
+
+/**
+ * The token image as a LAUNCH requirement, rather than as a string.
+ *
+ * ## ⛔⛔ WHY THIS IS SEPARATE FROM `checkLogo`
+ *
+ * `checkLogo` answers "is this string usable" and is right to say yes to an empty one — an empty
+ * field is not an error while somebody is still filling the form in. This answers the different and
+ * permanent question: **may this launch go ahead?**
+ *
+ * Name, symbol and logo are all written into the token's constructor and Pons V2 ships **no setter
+ * for any of them**. Until 5 Sep 2026 the form required the first two and not the third, so the one
+ * permanent field whose wrongness is invisible — a link, not a value you can read back and check —
+ * was also the only one you could leave blank. Pons accepts an empty logo silently; that is proven
+ * on a fork against the live launchpad, not assumed. `$GRAILS` on a sibling project launched with
+ * no image and has none forever.
+ *
+ * @param reachable whether the browser actually LOADED the image. `null` means it has not finished
+ *        trying, and must never block — an error for the moment between pasting a good link and it
+ *        appearing is an error for doing the right thing.
+ *
+ * ⛔ Shape is not reachability. A well-formed https link to a file nobody serves passes `checkLogo`
+ * and would be written on chain permanently. This server has shipped exactly that: logos were
+ * stored and never served, so every upload returned a URL that 404'd.
+ *
+ * @returns the problem to show, or `null` when the image is fit to be made permanent.
+ */
+export function tokenImageProblem(value: string, reachable: boolean | null): string | null {
+  if (!value.trim()) return 'The token needs an image. It cannot be added after the launch.'
+  if (!checkLogo(value).ok) return 'The token image is not usable.'
+  if (reachable === false) return 'The token image link does not load. Nothing would be there.'
+  return null
+}

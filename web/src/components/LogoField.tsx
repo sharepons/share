@@ -13,12 +13,43 @@ import { checkLogo, resolveImage } from '../lib/logo.ts'
  * ⚠⚠ EVERY FAILURE SAYS "NOTHING WAS UPLOADED", EXPLICITLY, and clears the field. Somebody who
  * believes their image was accepted when it was not launches a token with no picture, permanently.
  */
-export function LogoField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function LogoField({
+  value,
+  onChange,
+  onReachable,
+}: {
+  value: string
+  onChange: (v: string) => void
+  /**
+   * ⛔⛔ REPORTS WHETHER THE URL ACTUALLY LOADS — `null` while unknown, `false` once the browser has
+   * tried and failed. `checkLogo` only reads the SHAPE of a string; a perfectly-shaped link to a
+   * file nobody serves passes it. This server has already shipped that exact bug once — logos were
+   * stored and never served, so every upload returned a URL that 404'd — and the launch it feeds is
+   * permanent, so the form has to know the difference between "looks like a URL" and "is an image".
+   * @see LaunchForm's `problems`.
+   */
+  onReachable?: (reachable: boolean | null) => void
+}) {
   const [available, setAvailable] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
   const [over, setOver] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+
+  /* ⚠ Reset to `null` (unknown) whenever the URL changes, NOT to `false`. Reporting "unreachable"
+     for an image the browser has not tried yet would block the launch button for the moment
+     between pasting a good link and it loading — an error for doing the right thing. */
+  const [reachable, setReachable] = useState<boolean | null>(null)
+  useEffect(() => {
+    setReachable(null)
+    onReachable?.(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  const settle = (ok: boolean) => {
+    setReachable(ok)
+    onReachable?.(ok)
+  }
 
   /* ⚠ Asked once, and the drop zone is only drawn if the answer is yes. Offering an upload on a
      deployment with nothing behind it produces "the upload failed (405)" — a status code, shown to
@@ -55,7 +86,13 @@ export function LogoField({ value, onChange }: { value: string; onChange: (v: st
             the field looks like, and a neutral hole beside a dashed rectangle reads as something
             that failed to load rather than as a slot waiting to be filled. */}
         <span className="logo__tile" aria-hidden="true">
-          {preview ? <img src={preview} alt="" /> : <span className="logo__tile-empty">none</span>}
+          {preview ? (
+            /* ⛔ onError is the whole check. A 404, a dead host, a file that is not an image — all
+               of them land here, and none of them are visible in the string itself. */
+            <img src={preview} alt="" onLoad={() => settle(true)} onError={() => settle(false)} />
+          ) : (
+            <span className="logo__tile-empty">none</span>
+          )}
         </span>
 
         {/* ⚠ A flex COLUMN. The drop zone is not the only child — the error text and the remove
@@ -114,6 +151,13 @@ export function LogoField({ value, onChange }: { value: string; onChange: (v: st
 
           {failed && <p className="field__err">{failed}</p>}
           {!failed && !check.ok && <p className="field__err">{check.error}</p>}
+          {/* ⚠ Only once the browser has actually tried and failed — never while `reachable` is
+              null, which is every image's first moment. */}
+          {!failed && check.ok && value.trim() !== '' && reachable === false && (
+            <p className="field__err">
+              That link does not load an image. The token would carry it forever with nothing behind it.
+            </p>
+          )}
           {value && (
             <button type="button" className="btn btn--sm" style={{ alignSelf: 'flex-start' }} onClick={() => { onChange(''); setFailed(null) }}>
               Remove image

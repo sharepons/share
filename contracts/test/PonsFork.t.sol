@@ -13,6 +13,22 @@ interface IERC20Balance {
     function balanceOf(address account) external view returns (uint256);
 }
 
+/**
+ * What a launched Pons V2 token says about ITSELF.
+ *
+ * ⛔⛔ EVERY ONE OF THESE IS WRITTEN IN THE CONSTRUCTOR AND HAS NO SETTER. A wrong name, symbol or
+ * logo is wrong for the life of the token — the only remedy is launching a different one. `$GRAILS`
+ * on a sibling project launched with an empty logo and it is empty forever.
+ * ⚠ `logo` is a full URL, not an id, so the token also permanently pins a HOST. A sibling stranded
+ * 22 of 24 token logos by retiring the domains they pointed at.
+ */
+interface IPonsTokenMetadata {
+    function name() external view returns (string memory);
+    function symbol() external view returns (string memory);
+    function logo() external view returns (string memory);
+    function description() external view returns (string memory);
+}
+
 interface IPonsCurveBuy {
     function buy(uint256 quoteIn, uint256 minTokensOut, address recipient)
         external
@@ -159,6 +175,72 @@ contract PonsForkTest is Test {
 
         // The splitter knows its token, so a release can reach the vault.
         assertEq(ShareSplitter(payable(splitter)).token(), token);
+    }
+
+    /**
+     * ⛔⛔ THE METADATA A LAUNCH WRITES IS PERMANENT, AND NOTHING HERE CHECKED IT UNTIL NOW.
+     *
+     * `ShareLaunchpad._launch` takes `LaunchParams` by `memory` and overwrites exactly one field —
+     * `creatorFeeRecipient`, which must become the splitter. Everything else is meant to reach Pons
+     * untouched. "Meant to" was the entire guarantee: the mock suite never read a token back, and
+     * this fork suite launched with `logo = ""`, so a launchpad that dropped or transposed name and
+     * symbol would have passed all 73 tests and every rehearsal.
+     *
+     * ⚠ Read off the TOKEN, not off the params — the point is what the chain now says, forever.
+     */
+    function test_theLaunchedTokenCarriesTheExactNameSymbolAndLogo() public {
+        IPonsV2Factory.LaunchParams memory p = _params();
+        p.name = "Share Pons";
+        p.symbol = "SHARE";
+        p.logo = LOGO_URL;
+        p.description = "share the fees";
+
+        ShareLaunchpad.RecipientInput[] memory rs = _recipients();
+        vm.prank(creator);
+        (address token,,) = pad.launch{value: factory.launchFee()}(p, CONFIG, NATIVE, rs);
+
+        IPonsTokenMetadata t = IPonsTokenMetadata(token);
+        assertEq(t.name(), "Share Pons", "the NAME did not survive the launch");
+        assertEq(t.symbol(), "SHARE", "the SYMBOL did not survive the launch");
+        assertEq(t.logo(), LOGO_URL, "the LOGO did not survive the launch - it has no setter");
+        assertEq(t.description(), "share the fees", "the DESCRIPTION did not survive the launch");
+    }
+
+    /**
+     * ⛔ A LAUNCH WITH NO IMAGE SUCCEEDS SILENTLY. Nothing on chain requires a logo, so the failure
+     * mode is not a revert — it is a token that exists, trades, and is blank on every terminal
+     * forever. This test exists to state that out loud: if it ever starts failing because Pons began
+     * rejecting an empty logo, that is GOOD NEWS and the interface should stop allowing one.
+     * ⚠ It is also why the front end must upload and verify the image BEFORE the launch button.
+     */
+    function test_anEmptyLogoIsAcceptedByPons_whichIsWhyTheInterfaceMustNotAllowIt() public {
+        IPonsV2Factory.LaunchParams memory p = _params();
+        p.logo = "";
+        ShareLaunchpad.RecipientInput[] memory rs = _recipients();
+        vm.prank(creator);
+        (address token,,) = pad.launch{value: factory.launchFee()}(p, CONFIG, NATIVE, rs);
+
+        assertEq(IPonsTokenMetadata(token).logo(), "", "Pons now rejects an empty logo - tighten the interface");
+    }
+
+    /**
+     * ⚠ Case and punctuation are preserved byte for byte. A launchpad that upper-cased a symbol or
+     * trimmed a name would be a permanent, silent rewrite of what the launcher typed.
+     */
+    function test_metadataIsNotNormalisedOnTheWayThrough() public {
+        IPonsV2Factory.LaunchParams memory p = _params();
+        p.name = "  Share Pons  ";
+        p.symbol = "sHaRe";
+        p.logo = "https://sharepons.family/logos/UPPER-case_1.png";
+
+        ShareLaunchpad.RecipientInput[] memory rs = _recipients();
+        vm.prank(creator);
+        (address token,,) = pad.launch{value: factory.launchFee()}(p, CONFIG, NATIVE, rs);
+
+        IPonsTokenMetadata t = IPonsTokenMetadata(token);
+        assertEq(t.name(), "  Share Pons  ", "the name was normalised - whitespace must reach the chain as typed");
+        assertEq(t.symbol(), "sHaRe", "the symbol was case-folded somewhere in the path");
+        assertEq(t.logo(), "https://sharepons.family/logos/UPPER-case_1.png", "the logo URL was rewritten");
     }
 
     /**
@@ -398,6 +480,11 @@ contract PonsForkTest is Test {
             bps: 3000
         });
     }
+
+    /* ⚠ The SHAPE the server actually produces: LOGO_PUBLIC_BASE + a 32-char hex digest + the
+       real extension. Verified live — the upload endpoint returns exactly this and the URL
+       answers 200 image/png. ⛔ The host is ours on purpose; a launch pins it forever. */
+    string internal constant LOGO_URL = "https://sharepons.family/logos/446a55f04b820db560bab0f87ffac021.png";
 
     function _params() internal returns (IPonsV2Factory.LaunchParams memory p) {
         p.name = "Share Fork Rehearsal";
