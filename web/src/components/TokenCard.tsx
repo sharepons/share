@@ -42,7 +42,7 @@ export function TokenCard({ launch }: { launch: Launch }) {
         ) : (
           /* ⛔ Not a loading state. `logo` is set in the token's constructor and Pons V2 ships no
              setter, so a launch made without one never gets one. */
-          <span aria-hidden="true">{launch.symbol.slice(0, 3).toUpperCase()}</span>
+          <span className="card__fallback" aria-hidden="true">{launch.symbol.slice(0, 3).toUpperCase()}</span>
         )}
         {/* ⛔ TWO DIFFERENT STATES, AND ONE OF THEM IS NOT A TRADEABLE TOKEN. Phase 1 is swept off
             the curve with no pool seeded yet: it does not trade and cannot earn, so badging it
