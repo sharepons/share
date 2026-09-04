@@ -144,65 +144,28 @@ h1 {
 }
 .chip svg { fill: currentColor; }
 
-form { display: flex; gap: 10px; justify-content: center; width: 100%; max-width: 400px; }
-
-/* ⛔ A FIELD IS NOT A PILL — 10px, not 999px. Actions are the roundest thing in this brand; an
-   input at the same radius reads as a search box. */
-input[type=password] {
-  flex: 1 1 auto;
-  min-width: 0;
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line-lit);
-  border-radius: 10px;
-  padding: 12px 15px;
-}
-input[type=password]::placeholder { color: var(--faint); }
-input[type=password]:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
-  border-color: var(--ink);
-}
-
-/* @see .btn--primary.btn--lg */
-button {
-  flex: none;
-  font: inherit;
+/* ⛔ THE LOOK OF THE PRIMARY BUTTON, NONE OF ITS BEHAVIOUR. Same fill, same border, same radius
+   and the same padding as .btn--primary.btn--lg — so it sits in the composition exactly where the
+   action used to — but it is not focusable, not clickable and has no hover state, because none of
+   those would lead anywhere. @see .btn--primary in web/src/styles.css */
+.soon {
+  margin: 0;
+  display: inline-block;
   font-family: var(--font-ui);
   font-weight: 600;
   font-size: 1rem;
-  cursor: pointer;
   color: var(--on-signal);
   background: var(--signal);
   border: 1px solid var(--signal-deep);
   border-radius: 999px;
   padding: 13px 22px;
-  transition: background 140ms ease, transform 140ms ease;
-}
-button:hover { background: var(--signal-deep); }
-button:active { transform: translateY(1px); }
-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-
-/* ⚠ Hidden with the `hidden` attribute, not a class, so it is invisible to assistive tech too. */
-.err { color: var(--bad); font-size: 0.9rem; margin: 14px 0 0; }
-.err[hidden] { display: none; }
-
-.foot {
-  margin: 26px 0 0;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
+  /* ⚠ It is text, not a control: no pointer, and nothing to select mid-sentence. */
+  cursor: default;
+  user-select: none;
 }
 
-@media (max-width: 460px) {
-  form { flex-direction: column; }
-  button { width: 100%; }
-}
 @media (prefers-reduced-motion: reduce) {
-  button { transition: none; }
+  .chip { transition: none; }
 }
 </style>
 </head>
@@ -225,66 +188,37 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
       <span class="chip" title="TikTok"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5 2.59 2.59 0 0 1 0-5.18c.27 0 .53.04.77.12v-3.2a5.8 5.8 0 0 0-.77-.05A5.72 5.72 0 0 0 4.15 15.3 5.72 5.72 0 0 0 9.86 21a5.72 5.72 0 0 0 5.71-5.71V9.01a7.35 7.35 0 0 0 4.28 1.37V7.3a4.28 4.28 0 0 1-3.25-1.48Z"/></svg></span>
   </div>
 
-  <form id="gate" autocomplete="off">
-    <input
-      id="pw"
-      type="password"
-      name="access"
-      placeholder="Access code"
-      aria-label="Access code"
-      autocomplete="current-password"
-      required
-    />
-    <button type="submit">Enter</button>
-  </form>
-
-  <p class="err" id="err" role="alert" hidden>That code was not accepted. Try again.</p>
-
-  <p class="foot">Private preview</p>
+  <!-- ⛔⛔ A <p>, NOT A <button>. It is a status, and there is nothing to press. A real button that
+       does nothing is worse than no button: it takes focus, it invites a click, and a keyboard or
+       screen-reader user is told there is an action here when there is not. It borrows the button's
+       look on purpose and none of its behaviour. -->
+  <p class="soon">Launching soon</p>
 </main>
 
 <script>
-/* ⛔⛔ THE CODE IS NEVER CHECKED HERE, AND MUST NEVER BE. It is stored as the cookie value and Caddy
-   compares it on the NEXT request; a wrong one simply serves this page again. Comparing it in this
-   script would put the real secret in a file we hand to every anonymous visitor.
+/* ⛔⛔ THERE IS NO LONGER A WAY IN FROM THIS PAGE, BY DESIGN — the form is gone and the pill is a
+   status, not a control. Which would lock the OPERATOR out too, so one invisible door remains:
 
-   ⚠ THE ERROR IS THEREFORE INFERRED, NOT RETURNED. We mark "a code was just submitted" in
-   sessionStorage; if this page loads and that mark is set, the reload did not get through, so the
-   code was wrong. Without the mark a first-time visitor would be greeted by an error. */
+       https://sharepons.family/?key=THE_ACCESS_CODE
+
+   It writes the cookie Caddy checks and immediately replaces the URL with the bare path, so the
+   code does not linger in the address bar, in history, or in a Referer header on the next click.
+
+   ⚠ The code still travels in a URL, which a basic_auth password did not. Treat that link as the
+   credential it is: do not post it, and do not put it anywhere that logs full URLs.
+   ⛔ Nothing here validates it. Caddy compares the cookie on the NEXT request; a wrong key simply
+   lands back on this page, which is why there is no error state left to show. */
 (function () {
-  var KEY = 'sharepons.gate.tried'
-  var form = document.getElementById('gate')
-  var pw = document.getElementById('pw')
-  var err = document.getElementById('err')
+  var m = /[?&]key=([^&]+)/.exec(location.search)
+  if (!m) return
 
-  try {
-    if (sessionStorage.getItem(KEY)) {
-      err.hidden = false
-      sessionStorage.removeItem(KEY)
-    }
-  } catch (e) {
-    /* private mode, or storage blocked — the gate still works, it just cannot explain itself */
-  }
+  document.cookie =
+    'sharegate=' + m[1] +
+    '; path=/; max-age=2592000; samesite=lax' +
+    (location.protocol === 'https:' ? '; secure' : '')
 
-  form.addEventListener('submit', function (e) {
-    e.preventDefault()
-    var v = pw.value.trim()
-    if (!v) return
-
-    try { sessionStorage.setItem(KEY, '1') } catch (e2) {}
-
-    /* ⚠ 30 days, path=/ so it covers /api and /logos too, and SameSite=Lax so a link from X or a
-       chat app arrives WITH the cookie. Strict would drop it on exactly those first visits and on
-       the OAuth callback, and the gate would look broken at the only moments anyone notices it. */
-    document.cookie =
-      'sharegate=' + encodeURIComponent(v) +
-      '; path=/; max-age=2592000; samesite=lax' +
-      (location.protocol === 'https:' ? '; secure' : '')
-
-    location.replace(location.pathname + location.search)
-  })
-
-  pw.focus()
+  /* ⚠ replace(), not assign() — the URL carrying the code must not become a history entry. */
+  location.replace(location.pathname)
 })()
 </script>
 </body>

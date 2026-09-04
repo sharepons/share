@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "test": "node --test test/*.test.mjs",
-    "verify:graduation": "node scripts/verify-graduation.mjs"
+    "verify:graduation": "node scripts/verify-graduation.mjs",
+    "legal:static": "npm run build && node scripts/build-legal-static.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
