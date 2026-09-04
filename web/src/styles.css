@@ -942,7 +942,18 @@ a.card:hover { border-color: var(--line-lit); background: var(--surface-2); }
 */
 .step { background: var(--surface); padding: 22px; display: flex; flex-direction: column; gap: 0; }
 .step__n + h3 { margin-top: 6px; }
-.step h3 { margin-bottom: 12px; }
+/* ⛔⛔ TWO LINES OF MIN-HEIGHT, AND IT IS THE SAME BASELINE-GRID RULE AS `p + p` ABOVE. These cards
+   are read ACROSS. Two of the four titles wrap to a second line and two do not, so without a floor
+   here the one-line cards start their body copy a whole line ABOVE their neighbours' — the row stops
+   scanning and it looks like sloppy spacing rather than a wrapping difference.
+   ⚠ 1.1rem x 1.3 line-height x 2. Change either of those in `h3` and change this with them.
+   ⛔ Do NOT "fix" this by shortening the titles: they are the /how-it-works page's, verbatim, and
+   the two pages disagreeing is a worse bug than a ragged row. */
+/* ⚠ `wrap`, overriding the global `balance` on headings. Balance split the one two-line title as
+   "Fees are / distributed automatically" — it evens line LENGTHS, and the evenest split of that
+   string leaves a two-word orphan on top. Greedy wrapping fills the first line instead. Balance is
+   still right for the centred headings it was added for; it is wrong in a 280px card. */
+.step h3 { margin-bottom: 12px; min-height: calc(1.1rem * 1.3 * 2); text-wrap: wrap; }
 .step p + p { margin-top: 1.62em; }
 /* ⚠ Avoids a one-word last line, which in a row of four cards is the other thing that reads as
    uneven. Unsupported browsers keep today's wrapping. */
@@ -1297,6 +1308,17 @@ a.pick { color: var(--ink); text-decoration: none; }
 
 /* ⚠ A little air before the icons, so the line and the buttons read as two groups on one row. */
 .ftr__copy { font-size: 0.86rem; color: var(--dim); margin-right: 4px; }
+
+/* ⚠ Quieter than the copyright line, and it must NOT be underlined by default: three underlined
+   words between the © and the icon buttons turn one signature row into a navigation bar. */
+.ftr__link {
+  font-size: 0.86rem;
+  color: var(--faint);
+  text-decoration: none;
+  transition: color 140ms ease;
+}
+.ftr__link:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.ftr__link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
 
 /*
   ⛔ SQUARE, so two icon-only buttons are the same size whatever glyph is inside them. Sized by
@@ -1758,3 +1780,97 @@ a.social:hover { color: var(--ink); border-color: var(--line-lit); background: v
 .link:hover { border-bottom-color: var(--signal-ink); }
 .link--signal { color: var(--signal-ink); border-bottom-color: color-mix(in srgb, var(--signal-ink) 45%, transparent); }
 .trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* ══ privacy and terms ═════════════════════════════════════════════════════════════════════════
+   ⚠ ONE COLUMN OF PROSE, DELIBERATELY. Everything else on this site is built out of cards, rails
+   and tables because it is describing structure. These two pages are read start to finish by
+   somebody checking one specific thing, and a document is the right shape for that.
+   ⛔ Left aligned, and narrow. A centred legal page is unreadable and looks like marketing. */
+
+.legal .wrap { width: min(760px, 100% - var(--gut) * 2); }
+
+.legal__head { margin-bottom: clamp(28px, 4vw, 44px); }
+.legal__head h2 { font-size: clamp(1.9rem, 3.6vw, 2.6rem); letter-spacing: -0.03em; margin-bottom: 10px; }
+.legal__updated {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ⚠ Larger than the body copy under it and NOT green — it is an opening paragraph, not a notice. */
+.legal__lede {
+  font-size: clamp(1.02rem, 1.5vw, 1.16rem);
+  line-height: 1.55;
+  color: var(--ink);
+  margin-bottom: clamp(26px, 3vw, 36px);
+  text-wrap: pretty;
+}
+
+.legal__body h3 {
+  font-size: 1.06rem;
+  letter-spacing: -0.018em;
+  margin: clamp(30px, 4vw, 44px) 0 12px;
+  /* ⚠ --signal-ink, the ONLY green that carries type on this paper at 4.77:1. --signal is a fill
+     and would be unreadable; --signal-mark is for rules and dots. @see :root */
+  color: var(--signal-ink);
+}
+.legal__body p { color: var(--ink-2); text-wrap: pretty; }
+.legal__body strong { color: var(--ink); font-weight: 600; }
+
+.legal__body ul { margin: 0 0 1rem; padding: 0; list-style: none; }
+.legal__body li {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: 12px;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+/* ⛔ --signal-mark, not --signal. A 5px dot of #C6F700 on this paper is 1.15:1 — invisible, not
+   subtle, and the list would silently lose its markers. */
+.legal__body li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--signal-mark);
+}
+.legal__body li:last-child { margin-bottom: 0; }
+
+/* The scopes. A definition list in all but name — the platform, then the literal string sent. */
+.legal__table {
+  margin: 16px 0 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--surface);
+}
+.legal__table > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  align-items: baseline;
+  padding: 11px 16px;
+}
+.legal__table > div + div { border-top: 1px solid var(--line); }
+.legal__table span { font-weight: 600; min-width: 92px; }
+.legal__table code { font-size: 0.84rem; color: var(--dim); }
+
+.legal__switch {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: clamp(36px, 5vw, 56px);
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+  color: var(--faint);
+}
+.legal__switch a { color: var(--dim); text-decoration: none; }
+.legal__switch a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }

@@ -6,33 +6,38 @@
  * the `.step p + p` rule in styles.css already handle it: that rule spends exactly one line-height
  * so the text lands back on the shared baseline grid.
  */
+/* ⛔⛔ THE TITLES ARE THE /how-it-works PAGE'S, VERBATIM, IN ITS ORDER. This section and that page
+   are the same four steps told at two lengths, and they drifted: this one used to read
+   "Split the fees / Sign contracts / Launch / Claim" — different names, and Launch in third place
+   for a sequence that launches second. Somebody reading both was told the product works two ways.
+   ➤ If a step is renamed on the page, rename it here in the same edit. @see HowItWorksPage.tsx */
 const STEPS: { n: string; title: string; body: string[] }[] = [
   {
     n: '01',
-    title: 'Split the fees',
+    title: 'Set your split',
     body: [
-      'Split the fees with a X, GitHub, Instagram or TikTok account. You can share the fees across multiple accounts, giving each account its own share to claim directly.',
+      'Choose who receives the fees and how much. Shares can be assigned to X accounts, GitHub accounts, Instagram accounts, TikTok accounts and wallets, and must total 100%.',
     ],
   },
   {
     n: '02',
-    title: 'Sign contracts',
+    title: 'Launch the token',
     body: [
-      'The contracts signed at launch handle fee distribution automatically. Fee splits are fixed at launch and cannot be changed afterwards.',
+      'SHARE creates a fee contract holding your split and deploys the token on Pons with that contract as its fee recipient. One transaction: if any part fails, all of it reverts.',
     ],
   },
   {
     n: '03',
-    title: 'Launch',
+    title: 'Fees are distributed automatically',
     body: [
-      'One transaction deploys your fee split, creates the token on Pons and automates the entire distribution.',
+      'As the token trades, creator fees accumulate on Pons and are distributed by the split defined at launch. Each recipient receives their own balance, separate from everyone else\u2019s.',
     ],
   },
   {
     n: '04',
-    title: 'Claim',
+    title: 'Recipients claim their share',
     body: [
-      'Fee recipients can claim their share of the fees at any time. Each share is permanent and can never be changed or taken away.',
+      'Recipients claim whenever they want — a wallet directly, a social account by connecting it. Nothing expires: once assigned, a share stays available to that recipient.',
     ],
   },
 ]

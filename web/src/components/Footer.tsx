@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { GITHUB_URL, SITE_NAME, X_URL } from '../lib/brand.ts'
+import { PRIVACY, TERMS } from '../lib/router.ts'
 import { GithubIcon, XIcon } from './Icons.tsx'
+import { Link } from './Link.tsx'
 
 /**
  * ⛔⛔ A SOCIAL BUTTON WITH NO URL IS NOT RENDERED AS A LINK.
@@ -52,6 +54,10 @@ export function Footer() {
           1240px page read as two unrelated groups; together in the middle they read as one signature. */}
       <div className="wrap ftr__in">
         <span className="ftr__copy">© 2026 Share Pons</span>
+        {/* ⚠ `Link`, not `<a>` — an anchor here would reload the whole app to move between two
+            pages it has already downloaded. @see components/Link.tsx */}
+        <Link className="ftr__link" to={PRIVACY}>Privacy</Link>
+        <Link className="ftr__link" to={TERMS}>Terms</Link>
         <Social href={X_URL} label="X">
           <XIcon />
         </Social>
