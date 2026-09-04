@@ -8,7 +8,8 @@
     "check": "tsc --noEmit",
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "signer:address": "node --experimental-strip-types scripts/signer-address.ts",
-    "preflight": "node --experimental-strip-types scripts/preflight.ts"
+    "preflight": "node --experimental-strip-types scripts/preflight.ts",
+    "preflight:deployed": "WEB_DIST=/root/share-web/dist node --experimental-strip-types scripts/preflight.ts"
   },
   "dependencies": {
     "viem": "^2.55.10"

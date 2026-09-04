@@ -132,6 +132,10 @@ async function main() {
   web.VITE_LAUNCHPAD ||= process.env.VITE_LAUNCHPAD ?? ''
   web.VITE_SITE_URL ||= process.env.VITE_SITE_URL ?? ''
 
+  /* ⚠ Declared here, not down in the chain section: the config section below now asks the chain
+     to identify the launchpad in the served bundle, so a client is needed before that point. */
+  const client = createPublicClient({ transport: http(RPC) })
+
   console.log(`\nSHARE preflight`)
   console.log(`  server .env    ./.env`)
   console.log(`  site   env     ${WEB_ENV}`)
@@ -143,8 +147,61 @@ async function main() {
 
   const claimsEnv = process.env.CLAIMS_ADDRESS?.trim()
   const key = process.env.ATTESTATION_KEY?.trim()
-  const viteClaims = web.VITE_CLAIMS
-  const vitePad = web.VITE_LAUNCHPAD
+
+  /* ⛔⛔ ON THE BOX THERE IS NO `../web/.env.production` AND THERE NEVER WILL BE. Only `dist/` is
+     deployed, and vite baked those values into the bundle at build time. Until 5 Sep 2026 that made
+     the on-box run — the ONLY run that inspects the real deployment — hard-fail with
+     "VITE_LAUNCHPAD is not set … the feed has nothing to read", on a deployment whose feed was
+     working perfectly. ⛔ A check that cries wolf on a healthy system is worse than no check: the
+     next real failure gets waved through, and that lesson has already been paid for once here in
+     `server/deploy.sh`.
+
+     ➤ So when the source file is absent, the addresses are READ OUT OF THE SERVED BUNDLE. That is
+     not a weaker substitute — it is the stronger question. A source file records what somebody
+     meant to build; the bundle is what visitors are executing right now, and a `dist` that was
+     never rebuilt or never rsynced is invisible to every other check in this script.
+
+     ⚠ IT IS NOT CIRCULAR, and the shape matters. The bundle is not asked to confirm the server's
+     own values; it is scanned INDEPENDENTLY for the two addresses, and the comparisons downstream
+     (site vault == server vault, launchpad harvests the escrow the server knows, signer matches the
+     deployed vault) all still run against the chain. If the site were built against a different
+     vault than the server signs for, this finds it — which is the failure the whole file exists for.
+     ⚠ `dist` is scanned for ALL addresses, so the launchpad is identified by asking the launchpad
+     candidates which one the chain agrees is a launchpad — not by pattern-matching a name. */
+  let viteClaims = web.VITE_CLAIMS
+  let vitePad = web.VITE_LAUNCHPAD
+  let sourcedFromBundle = false
+
+  if ((!viteClaims || !vitePad) && inDist && inDist.size > 0 && claimsEnv && isAddress(claimsEnv)) {
+    /* The vault: the server's own vault address, CONFIRMED to be in the served bundle. If it is
+       not there, nothing is sourced and the failure below stands — which is correct, because a
+       bundle that does not mention the server's vault is a genuinely broken deployment. */
+    if (!viteClaims && inDist.has(claimsEnv.toLowerCase())) {
+      viteClaims = getAddress(claimsEnv)
+      sourcedFromBundle = true
+    }
+
+    /* ⭐⭐ The launchpad: ASKED FOR, NOT ASSUMED. The server never learns the launchpad address —
+       it only knows the vault — so it is found by asking every address in the bundle
+       `claims()` and keeping the one the CHAIN says points back at this vault. ⛔ That is the
+       identification, and it is why this is not a name match or a guess: a contract that answers
+       `claims()` with our vault IS a ShareLaunchpad for this deployment.
+       ⚠ Read-only, and the set is small (a bundle holds a handful of addresses). Anything that
+       reverts or is an EOA simply is not it. */
+    if (!vitePad) {
+      const candidates = [...inDist].filter((a) => a !== claimsEnv.toLowerCase())
+      for (const cand of candidates) {
+        const points = await client
+          .readContract({ address: getAddress(cand), abi: PAD_ABI, functionName: 'claims' })
+          .catch(() => null)
+        if (points && same(points as string, claimsEnv)) {
+          vitePad = getAddress(cand)
+          sourcedFromBundle = true
+          break
+        }
+      }
+    }
+  }
 
   /* ⚠ A blank address is NOT treated as a failure of the same kind as a wrong one. Before the
      deploy every one of these is legitimately empty and the site says so honestly; the point of
@@ -159,13 +216,21 @@ async function main() {
   else if (!isAddress(claimsEnv)) bad(`CLAIMS_ADDRESS is not an address: ${claimsEnv}`)
   else ok(`CLAIMS_ADDRESS ${getAddress(claimsEnv)}`)
 
-  if (!viteClaims) bad(`VITE_CLAIMS is not set in ${WEB_ENV} — the site will say the launchpad is not deployed`)
-  else if (!isAddress(viteClaims)) bad(`VITE_CLAIMS is not an address: ${viteClaims}`)
-  else ok(`VITE_CLAIMS     ${getAddress(viteClaims)}`)
+  const noSource = `not set in ${WEB_ENV}`
+  /* ⚠ On the box the fix is never "edit .env.production" — there isn't one. Say so, or the next
+     person creates a file that nothing reads and believes they have fixed it. */
+  const hint = existsSync(WEB_ENV)
+    ? ''
+    : `\n       ⛔ ${WEB_ENV} does not exist. On the deployment that is NORMAL — only dist/ is shipped.`
+      + `\n       ➤ Run with WEB_DIST=/root/share-web/dist so the addresses are read from the served bundle.`
 
-  if (!vitePad) bad(`VITE_LAUNCHPAD is not set in ${WEB_ENV} — the feed has nothing to read`)
+  if (!viteClaims) bad(`VITE_CLAIMS is ${noSource} — the site will say the launchpad is not deployed${hint}`)
+  else if (!isAddress(viteClaims)) bad(`VITE_CLAIMS is not an address: ${viteClaims}`)
+  else ok(`VITE_CLAIMS     ${getAddress(viteClaims)}${sourcedFromBundle ? '  (read from the SERVED BUNDLE)' : ''}`)
+
+  if (!vitePad) bad(`VITE_LAUNCHPAD is ${noSource} — the feed has nothing to read${hint}`)
   else if (!isAddress(vitePad)) bad(`VITE_LAUNCHPAD is not an address: ${vitePad}`)
-  else ok(`VITE_LAUNCHPAD  ${getAddress(vitePad)}`)
+  else ok(`VITE_LAUNCHPAD  ${getAddress(vitePad)}${sourcedFromBundle ? '  (read from the SERVED BUNDLE)' : ''}`)
 
   /* ⛔ The site and the server must name the SAME vault. Two real, answering contracts is the worst
      version of this bug: the site reads one ledger and the server signs against the other, so a
@@ -203,7 +268,6 @@ async function main() {
 
   console.log('\nchain')
 
-  const client = createPublicClient({ transport: http(RPC) })
   const liveChainId = await client.getChainId()
   const configuredChainId = Number(process.env.CHAIN_ID ?? 4663)
 
@@ -344,7 +408,21 @@ async function main() {
   console.log('\nurls')
 
   const publicUrl = (process.env.PUBLIC_URL ?? '').replace(/\/+$/, '')
-  const siteUrl = (web.VITE_SITE_URL ?? '').replace(/\/+$/, '')
+  /* ⭐ Same rule as the addresses above: on the box there is no source env, so read what is being
+     SERVED. The site URL is baked into index.html's og:url tag at build time, which is the only
+     place it can be checked on a deployment — and og:url being wrong is precisely the bug that
+     ships a blank card to X. ⚠ Sourced, not assumed: if the tag is absent the warning stands. */
+  let siteUrlRaw = web.VITE_SITE_URL ?? ''
+  let siteUrlFromBundle = false
+  if (!siteUrlRaw && WEB_DIST && existsSync(`${WEB_DIST}/index.html`)) {
+    const og = readFileSync(`${WEB_DIST}/index.html`, 'utf8')
+      .match(/<meta\s+property=["']og:url["']\s+content=["']([^"']+)["']/i)
+    if (og?.[1]) {
+      siteUrlRaw = og[1]
+      siteUrlFromBundle = true
+    }
+  }
+  const siteUrl = siteUrlRaw.replace(/\/+$/, '')
 
   /* ⛔ Every OAuth callback is registered against one exact URL built from PUBLIC_URL. If the site
      and the API disagree about the origin, sign-in redirects somewhere that is not this deployment
@@ -359,6 +437,7 @@ async function main() {
 
   if (!publicUrl) warn('PUBLIC_URL is not set — OAuth callbacks would be built from http://localhost:5234')
   else if (!siteUrl) warn(`VITE_SITE_URL is not set in ${WEB_ENV} — absolute URLs and og tags have no base`)
+  else if (siteUrlFromBundle) ok(`VITE_SITE_URL   ${siteUrl}  (read from og:url in the SERVED index.html)`)
   else if (same(publicUrl, siteUrl)) ok(`the site and the API agree the origin is ${publicUrl}`)
   else if (localDev) {
     warn(

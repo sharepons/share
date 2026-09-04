@@ -39,12 +39,21 @@
 # record looks perfect. Re-check with `dig +short @dns1.registrar-servers.com sharepons.family AAAA`
 # before blaming Caddy. A record that is PROXIED can never get a cert either; the tell is HTTP 525.
 
-# ## ⭐ THE GATE — replaced HTTP basic auth, 4 Sep 2026
+# ## ✅ THE SITE IS PUBLIC — the gate was removed 5 Sep 2026
 #
-# The browser's basic-auth dialog is not something you can put a logo on, so the gate is now a real
-# page: /root/share-gate/{index.html,logo.png,favicon.png}, served by Caddy to anybody whose request
-# does not carry the right cookie. ⛔ The check lives in THIS FILE, not in that page — see the
-# block below. Deploy the page with:
+# It ran for one day: HTTP basic auth on 4 Sep, then a designed gate page, then nothing. The history
+# matters only for one reason — **the gate is restorable and the parts are still here.** The page
+# still lives in `gate/` in the repo and at /root/share-gate on the box, and the matcher and handler
+# that enforced it are in git and in /etc/caddy/Caddyfile.bak-shareopen-*. See the block inside the
+# site definition for exactly how to put it back and what must sit above it.
+#
+# ⛔ THE ACCESS CODE NO LONGER GRANTS ANYTHING. `?key=` writes a cookie nothing reads.
+#
+# ⛔⛔ THIS HAS NOTHING TO DO WITH THE FIRST-LAUNCH GATE, which is in the bundle and is still up
+# until `ShareLaunchpad.count() > 0`. Opening the site did not open that, and closing the site again
+# would not close it. @see web/src/lib/launchGate.ts, docs/first-launch-gate.md.
+#
+# To redeploy the gate page (only meaningful if the gate comes back):
 #
 #     rsync -az --delete gate/ root@YOUR.SERVER.IP:/root/share-gate/
 #
@@ -67,57 +76,56 @@ sharepons.family, www.sharepons.family {
 	@www host www.sharepons.family
 	redir @www https://sharepons.family{uri} permanent
 
-	# ══ THE GATE ═══════════════════════════════════════════════════════════════════════════════
-	# ⛔⛔ THIS IS THE GATE. The page at /root/share-gate is only its face — nothing in that HTML
-	# checks anything, and the access code is not in it. A visitor without the cookie gets the gate
-	# page for EVERY path, including /api and /logos; a visitor with it gets the site. The code is
-	# typed on the gate page, stored as the cookie value, and compared HERE on the next request.
+	# ══ THE GATE IS GONE — THE SITE IS PUBLIC (5 Sep 2026) ═════════════════════════════════════
+	# The private-preview gate that lived here has been REMOVED at the operator's instruction. It was
+	# a cookie (`sharegate`) compared by Caddy over the whole domain, served from /root/share-gate.
 	#
-	# ⚠ SAME SECURITY MODEL AS THE basic_auth IT REPLACED — one shared credential the browser
-	# resends. It keeps the public out; it is not an authorisation system, and it never was.
+	# ⭐ WHAT IS LEFT BEHIND, AND WHY IT IS LEFT: /root/share-gate is still ON THE BOX, untouched, and
+	# the full block is one `git show` away (it was removed in the commit that opened the site; the
+	# live config before this change is /etc/caddy/Caddyfile.bak-shareopen-*). Restoring the gate is
+	# re-adding a matcher and a handle — nothing about it was one-way.
 	#
-	# ⚠ THE MATCHER MUST COME BEFORE EVERY OTHER `handle`. Caddy takes the first matching handle in
-	# a mutually-exclusive group, so placed after them the gate never runs and the site is public.
+	# ⛔⛔ THE ACCESS CODE IS NOW MEANINGLESS. `?key=` sets a cookie nothing compares. Do not hand that
+	# link to anybody as though it still grants something, and do not treat it as a credential that
+	# still needs protecting — the thing it opened no longer exists.
 	#
-	# ⚠ No `\s` in the regex ON PURPOSE — the Caddyfile does its own unescaping pass before the
-	# regexp engine sees the string, so a class written `[ ]` cannot be mangled by it.
+	# ⛔⛔ OPENING THE SITE DID NOT OPEN THE FIRST-LAUNCH GATE, AND THE TWO WERE NEVER RELATED. That
+	# one is in the BUNDLE (web/src/lib/launchGate.ts): until `ShareLaunchpad.count() > 0`, the launch
+	# form refuses anybody but the first-launch wallet, and it opens by itself the moment token #1
+	# exists. Nothing in this file has ever touched it. @see docs/first-launch-gate.md.
+	# ⚠ But note what opening the site DOES change about it: that gate is an INTERFACE gate over a
+	# launchpad with no owner and no admin, so the window in which a stranger can call `launch()`
+	# directly and take token #1 is now a window the whole internet can see. It was always bypassable
+	# by anyone reading the public repo; it is now bypassable by anyone reading the site. ➤ Launch.
 	#
-	# ➤ TO CHANGE THE CODE: edit it in the regex below, `caddy validate`, `systemctl reload caddy`.
-	#   Everyone already inside is logged out, because their cookie stops matching.
-	# ➤ TO OPEN THE SITE TO THE PUBLIC: delete this matcher and its `handle` block. That is all.
-	# ══ ONE HOLE IN THE GATE, ON PURPOSE ═══════════════════════════════════════════════════════
-	# ⛔⛔ MUST STAY ABOVE @ungated. Caddy takes the first matching handle, so below it this never
-	# runs and Meta gets the gate.
+	# ⭐⭐ /privacy, /terms AND /data-deletion ARE NOW SERVED BY THE APP, NOT AS FLAT HTML. They are
+	# real routes in the SPA router, so the `handle` at the bottom answers them via /index.html. The
+	# prerendered copies in /root/share-gate existed ONLY so App Review could read a policy through a
+	# closed gate; with the gate gone that reason is spent, and the real pages carry the site's nav.
+	# ⚠ The one thing lost: those copies were flat HTML with zero JavaScript, and these are not. If
+	# Meta's tooling ever fails to read the policy, that is the cause — the fix is to copy
+	# gate/{privacy,terms,data-deletion}.html into the dist root and add `{path}.html` to `try_files`
+	# below, NOT to gate the site again. ⛔ Re-run `npm run legal:static` first; a stale policy is
+	# worse than a JavaScript one.
+
+	# ══ INSTAGRAM'S DEAUTHORIZE CALLBACK ═══════════════════════════════════════════════════════
+	# ⚠ THIS IS NOW REDUNDANT — `handle /api/*` below routes it identically — AND IT IS KEPT ANYWAY,
+	# because the reason it exists is not obvious from the outside and rediscovering it cost a
+	# debugging session:
 	#
-	# Instagram's deauthorize callback is a server-to-server POST from Meta's machines. Behind the
-	# gate it does not merely fail — `file_server` refuses POST, so Meta receives **405 Method Not
-	# Allowed**, which is not a "your app is private" answer, it is a broken endpoint. Verified by
-	# curl before this block existed.
+	# Instagram's deauthorize callback is a server-to-server POST from Meta's machines. Behind a
+	# static-file gate it does not merely fail — `file_server` REFUSES POST, so Meta receives 405
+	# Method Not Allowed, which is not a "your app is private" answer, it is a broken endpoint.
 	#
-	# ⚠ WHY THIS IS NOT THE `/privacy` MISTAKE. Exempting a PAGE route opens the whole site, because
-	# the SPA fallback serves index.html and index.html pulls the entire application bundle — see
-	# the note in the @ungated handler. This path is not a page: it reverse-proxies to the API,
-	# answers only JSON, requires a valid HMAC signature over Meta's payload, and returns 400 to
-	# everything else. There is no bundle behind it and nothing to navigate to.
+	# ⛔⛔ SO IF A GATE IS EVER PUT BACK, THIS BLOCK MUST SIT ABOVE IT. Caddy takes the first matching
+	# handle in a mutually-exclusive group; below the gate matcher it never runs.
+	# ⚠ And it is safe above one, unlike a page route: it reverse-proxies to the API, answers only
+	# JSON, requires a valid HMAC over Meta's signed_request, and returns 400 to everything else.
+	# There is no bundle behind it and nothing to navigate to. Exempting a PAGE route would have
+	# opened the whole site, because index.html pulls the entire application.
 	# @see server/src/index.ts and server/src/providers/metaSignedRequest.ts
 	handle /api/instagram/deauthorize {
 		reverse_proxy 127.0.0.1:5234
-	}
-
-	@ungated {
-		not header_regexp Cookie "(^|;[ ]*)sharegate=YOUR_ACCESS_CODE_HERE(;|$)"
-	}
-	handle @ungated {
-		root * /root/share-gate
-		# ⭐⭐ {path}.html IS WHAT MAKES /privacy AND /terms READABLE WITHOUT THE CODE, and it is the
-		# whole reason they are prerendered to flat HTML instead of being exempted from the gate.
-		# ⛔⛔ EXEMPTING THE ROUTE INSTEAD WOULD OPEN THE WHOLE SITE: /privacy would serve the SPA's
-		# index.html, which pulls /assets/index-*.js — the entire application — and the app reads
-		# the chain straight from the browser, so only /api/* would still be shut. These two files
-		# carry no bundle and link nowhere but back to the gate.
-		# ⚠ Everything else still falls through to /index.html, which is the gate.
-		try_files {path} {path}.html /index.html
-		file_server
 	}
 
 	# ⛔⛔ THE API MUST BE MATCHED BEFORE THE SPA FALLBACK. Ordering is the whole thing: reversed,
@@ -152,22 +160,25 @@ sharepons.family, www.sharepons.family {
 		X-Frame-Options "DENY"
 	}
 
-	# ⛔⛔ THE GATE MAKES `/` TWO DIFFERENT DOCUMENTS AT ONE URL, AND A CACHE CANNOT SEE WHY.
-	# Same path, same method: without the cookie Caddy serves the 11KB gate page, with it the 3KB
-	# app shell. Nothing in the response said the body depends on a request header, so a browser
-	# that had already been to the gate cached THAT for `/` and re-served it from disk. The ?key=
-	# link then worked perfectly and looked completely broken: the cookie was written, and
-	# `location.replace('/')` was answered out of the local cache with the gate page again.
-	# Reported as "that preview link dont work", 5 Sep 2026.
+	# ⛔⛔ ANY RESPONSE WHOSE BODY DEPENDS ON A REQUEST HEADER MUST SAY SO. Added 5 Sep 2026 after the
+	# preview gate made `/` two different documents at one URL — 11KB gate page without the cookie,
+	# 3KB app shell with it — while the response advertised only `Vary: Accept-Encoding`. Browsers
+	# that had seen the gate cached THAT for `/`, so setting the cookie and calling replace('/') was
+	# answered out of local disk with the gate again, never reaching the server: a working door that
+	# looked completely dead. Reported as "that preview link dont work".
 	#
-	# `Vary: Cookie` is the correct, minimal statement of the dependency. `no-store` on top of it is
-	# because these are two SECURITY-relevant documents at one address and neither is worth caching:
-	# the gate page is 11KB of static text and the app shell is a 3KB stub in front of hashed assets.
-	# ⛔ It must NOT cover /assets/* — those filenames carry a content hash, are immutable, and are
-	# the only thing on this site worth a long cache.
+	# ⭐ THE GATE IS GONE AND THIS STAYS, for two reasons that outlive it:
+	#   1. `/api/*` genuinely varies by the SESSION cookie — /api/session and the claim endpoints
+	#      answer differently per signed-in visitor, and that must never land in a shared cache.
+	#   2. index.html is the SPA's entry point and names the content-hashed bundle. Cached, a
+	#      visitor keeps loading the PREVIOUS deploy's asset names after every redeploy — which is
+	#      exactly what happens the moment the token's CA is baked in and shipped.
+	#
+	# ⛔ It must NOT cover /assets/* or /logos/* — those filenames carry a content hash or a token
+	# id, never change under the same name, and are the only things here worth a long cache.
 	# ⚠ `+Vary` APPENDS. A bare `Vary` would replace the `Accept-Encoding` that `encode` sets, and
 	# the reward for that is a gzip body served to a client that asked for identity.
-	@cookie-dependent not path /assets/*
+	@cookie-dependent not path /assets/* /logos/*
 	header @cookie-dependent {
 		+Vary Cookie
 		Cache-Control "no-store"
