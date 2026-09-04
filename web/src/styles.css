@@ -1883,3 +1883,38 @@ a.social:hover { color: var(--ink); border-color: var(--line-lit); background: v
 }
 .legal__switch a { color: var(--dim); text-decoration: none; }
 .legal__switch a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ══ BURN ═══════════════════════════════════════════════════════════════════════════════════════
+   The only irreversible control on this site, and the styling says so: a red hairline rather than
+   the page's usual quiet card, and no primary-green button anywhere near it.
+   ⛔ It must NOT use `--signal`. Green here reads as "go", and this is the one place that is wrong.
+   ⚠ Classed, never `.burn input` or `.burn button` — a descendant selector inside a component box
+   is a trap for whatever gets added to that box later. The graduation badge was rendered unreadable
+   for the life of the project by exactly that mistake. @see .card__fallback. */
+.burn {
+  margin-top: 22px;
+  border-color: #e9c6c1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.burn__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--bad);
+  margin: 0;
+}
+.burn__lede { color: var(--ink-2); margin: 0; max-width: 52ch; }
+.burn__bal { color: var(--ink-2); margin: 4px 0 0; font-size: 0.92rem; }
+.burn__label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-top: 8px;
+}
+.burn > input { width: 100%; max-width: 320px; }
+.burn > .btn { margin-top: 12px; }
+.burn__done { color: var(--good); margin: 4px 0 0; }

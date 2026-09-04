@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Address } from 'viem'
 import { addrUrl, publicClient, rhc, tokenUrl, txUrl } from '../lib/chain.ts'
 import { createGraduatedPool, sweepAndHarvest } from '../lib/claims.ts'
+import { BurnPanel } from './BurnPanel.tsx'
 import { amount, ago, pct, short } from '../lib/format.ts'
 import { resolveImage } from '../lib/logo.ts'
 import { formatUsd } from '../lib/marketCap.ts'
@@ -399,6 +400,11 @@ function SweepPanel({ view, onDone }: { view: TokenView; onDone: () => void }) {
           <a className="link" href={txUrl(hash)} target="_blank" rel="noreferrer noopener">the transaction</a>.
         </div>
       )}
+
+      {/* ⛔ Renders as NOTHING for every wallet but one, and is last on the page on purpose: the
+          only irreversible control here should never sit above the ones that just move money.
+          @see lib/burn.ts — a visibility gate, not a permission. */}
+      <BurnPanel token={view.address} symbol={view.symbol} />
     </div>
   )
 }
